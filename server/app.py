@@ -11,39 +11,6 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-DRIVERS = [
-    {
-        "id": "driver-001",
-        "name": "Driver 001",
-        "place": "Stone Town",
-        "initials": "AM",
-        "color": "#e4b84a",
-        "status": "On trip",
-        "online": True,
-        "tripsToday": 3,
-    },
-    {
-        "id": "driver-002",
-        "name": "Driver 002",
-        "place": "Airport",
-        "initials": "SH",
-        "color": "#e8795d",
-        "status": "Available",
-        "online": True,
-        "tripsToday": 2,
-    },
-    {
-        "id": "driver-003",
-        "name": "Driver 003",
-        "place": "Nungwi",
-        "initials": "HM",
-        "color": "#4e9c88",
-        "status": "Available",
-        "online": True,
-        "tripsToday": 4,
-    },
-]
-
 event_subscribers = set()
 VALID_STATUSES = {"searching", "accepted", "in_progress", "completed", "cancelled"}
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), "zinzi.db")
@@ -124,11 +91,6 @@ def health():
     return jsonify({"ok": True, "service": "zanzi-ride-api", "timestamp": now_iso()})
 
 
-@app.get("/api/drivers")
-def get_drivers():
-    return jsonify({"data": DRIVERS})
-
-
 @app.get("/api/events")
 def events():
     def stream():
@@ -147,40 +109,6 @@ def events():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-@app.get("/api/dashboard")
-def get_dashboard():
-    return jsonify({
-        "data": {
-            "grossRevenue": "TSh 420,000",
-            "activeTrips": 4,
-            "driversOnline": 12,
-            "totalDrivers": 18,
-            "commission": "TSh 63,000",
-            "drivers": DRIVERS,
-            "activity": [
-                {
-                    "type": "ride",
-                    "title": "Trip started",
-                    "detail": "Driver 001, Stone Town to Airport",
-                    "time": "2m",
-                },
-                {
-                    "type": "money",
-                    "title": "Cash payment recorded",
-                    "detail": "Trip ZR-2048",
-                    "time": "9m",
-                },
-                {
-                    "type": "alert",
-                    "title": "Driver verification",
-                    "detail": "2 documents need review",
-                    "time": "18m",
-                },
-            ],
-        }
-    })
 
 
 @app.post("/api/rides")
@@ -249,26 +177,6 @@ def update_ride_status(ride_id):
 
     ride = serialize_ride(updated_row)
     publish_event({"type": "ride.updated", "data": ride})
-    return jsonify({"data": ride})
-
-
-@app.post("/api/rides/<ride_id>/accept")
-def accept_ride(ride_id):
-    with get_db() as connection:
-        row = connection.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
-        if row is None:
-            return jsonify({"error": "ride not found"}), 404
-        if row["status"] != "searching":
-            return jsonify({"error": "ride is no longer available"}), 409
-
-        connection.execute(
-            "UPDATE rides SET status = ?, driver_id = ?, driver_name = ?, vehicle_plate = ?, eta_minutes = ? WHERE id = ?",
-            ("accepted", "driver-002", "Hassan Mwinyi", "Z 428 HMM", 4, ride_id),
-        )
-        updated_row = connection.execute("SELECT * FROM rides WHERE id = ?", (ride_id,)).fetchone()
-
-    ride = serialize_ride(updated_row)
-    publish_event({"type": "ride.accepted", "data": ride})
     return jsonify({"data": ride})
 
 

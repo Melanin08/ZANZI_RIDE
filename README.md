@@ -1,36 +1,12 @@
-# React + TypeScript + Vite
+# Zanzi Ride
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Zanzi Ride is a realistic ride-hailing MVP for Zanzibar. The prototype is split into three separate development web apps:
 
-Currently, two official plugins are available:
+- Passenger app: pickup, destination, vehicle type, fare estimate, ride request, driver details, payment, rating, and trip history area.
+- Driver app: online/offline status, ride request, accept/reject, route details, earnings, rating, and trip history area.
+- Owner dashboard: live driver map, active trips, drivers online, revenue, commission, verification, pricing, complaints, and reports areas.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
-
-## Zanzi Ride
-
-Zanzi Ride is split into a React client and a Python Flask API server for the passenger app, driver app, and owner dashboard prototype.
+The first payment scope is cash and mobile money. Card, wallet, and corporate billing should come later after the core ride flow is stable.
 
 ## Project structure
 
@@ -39,8 +15,7 @@ client/                 React + Vite frontend
   src/
   public/
   index.html
-  vite.config.ts
-server/                 Python + Flask backend
+server/                 Python + Flask API
   app.py
   requirements.txt
 ```
@@ -53,30 +28,28 @@ pip install -r server/requirements.txt
 npm run dev
 ```
 
-To run the frontend by itself:
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-Then open the Vite URL shown in the terminal, usually `http://localhost:5173`.
-
 This starts:
 
 - Frontend: `http://localhost:5173`
 - API server: `http://localhost:4000`
 
-The Vite client proxies `/api` requests to the Flask server.
+The Vite client proxies `/api` requests to Flask.
+
+During development, each web app has its own URL and navigation:
+
+- Passenger app: `http://localhost:5173/passenger`
+- Driver app: `http://localhost:5173/driver`
+- Owner dashboard: `http://localhost:5173/owner`
+
+The root URL redirects to the passenger app, and `/admin` also opens the owner dashboard.
 
 ## Useful scripts
 
 ```bash
-npm run dev:client   # Vite frontend only
-npm run dev:server   # Flask API only
-npm run build        # TypeScript check and production frontend build
-npm run lint         # Oxlint
+npm run dev:client
+npm run dev:server
+npm run build
+npm run lint
 ```
 
 ## API routes
@@ -84,9 +57,10 @@ npm run lint         # Oxlint
 - `GET /api/health`
 - `GET /api/drivers`
 - `GET /api/dashboard`
-- `GET /api/events` (Server-Sent Events stream)
+- `GET /api/events`
 - `GET /api/rides`
 - `POST /api/rides`
 - `PATCH /api/rides/:rideId/status`
+- `POST /api/rides/:rideId/accept`
 
-The frontend displays `API LIVE` when it is connected to Flask and shows the latest server event in the profile area. The current server uses in-memory demo data. Production work should add authentication, a persistent database, map providers, and payment integrations for cash and mobile money.
+Production work still needs authentication, real driver/passenger accounts, a proper database, map provider integration, live GPS updates, and mobile-money provider integration.

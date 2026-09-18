@@ -1,59 +1,94 @@
-import { useEffect, useState } from "react";
-import { createRide, getDashboard, subscribeToEvents, type DashboardData } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { createRide, subscribeToEvents } from "./api";
 import "./App.css";
 
-type Mode = "passenger" | "driver" | "admin";
 type RideStage = "home" | "searching" | "found" | "trip" | "rating";
 type Language = "en" | "sw";
+type LatLng = { lat: number; lng: number; accuracy?: number };
 
-const drivers = [
-  {
-    name: "Driver 001",
-    place: "Stone Town",
-    initials: "AM",
-    color: "#e4b84a",
-    status: "On trip",
-  },
-  {
-    name: "Driver 002",
-    place: "Airport",
-    initials: "SH",
-    color: "#e8795d",
-    status: "Available",
-  },
-  {
-    name: "Driver 003",
-    place: "Nungwi",
-    initials: "HM",
-    color: "#4e9c88",
-    status: "Available",
-  },
-];
+function getDistanceKm(from: LatLng, to: LatLng) {
+  const earthRadiusKm = 6371;
+  const latDelta = ((to.lat - from.lat) * Math.PI) / 180;
+  const lngDelta = ((to.lng - from.lng) * Math.PI) / 180;
+  const fromLat = (from.lat * Math.PI) / 180;
+  const toLat = (to.lat * Math.PI) / 180;
+  const curve =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(fromLat) * Math.cos(toLat) * Math.sin(lngDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(curve), Math.sqrt(1 - curve));
+}
+
+function formatTsh(amount: number) {
+  return `TSh ${Math.round(amount / 100) * 100}`.replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    ",",
+  );
+}
+
+function estimateFare(vehicle: string, distanceKm: number) {
+  const pricing =
+    vehicle === "Boda"
+      ? { base: 1200, perKm: 650, minimum: 2000 }
+      : vehicle === "XL"
+        ? { base: 4500, perKm: 1350, minimum: 9000 }
+        : { base: 2800, perKm: 1050, minimum: 5500 };
+  const center = Math.max(pricing.minimum, pricing.base + distanceKm * pricing.perKm);
+  const low = center * 0.92;
+  const high = center * 1.12;
+
+  return `${formatTsh(low)} - ${formatTsh(high)}`;
+}
+
+type AppMode = "passenger" | "driver" | "admin";
+
+const modeRoutes: Record<AppMode, string> = {
+  passenger: "/passenger",
+  driver: "/driver",
+  admin: "/admin",
+};
+
+function modeFromPath(pathname: string): AppMode {
+  const section = pathname.split("/").filter(Boolean)[0];
+  if (section === "driver") return "driver";
+  if (section === "admin") return "admin";
+  return "passenger";
+}
 
 function App() {
-  const [mode, setMode] = useState<Mode>("passenger");
   const [stage, setStage] = useState<RideStage>("home");
   const [vehicle, setVehicle] = useState("Comfort");
-  const [activeNav, setActiveNav] = useState("Overview");
   const [language, setLanguage] = useState<Language>("en");
   const [notice, setNotice] = useState("");
-  const [, setDashboard] = useState<DashboardData | null>(null);
   const [apiStatus, setApiStatus] = useState<"connecting" | "live" | "offline">(
     "connecting",
   );
-  const [lastEvent, setLastEvent] = useState("Waiting for server events");
+  const [lastEvent, setLastEvent] = useState("Waiting for server");
+  const [currentMode, setCurrentMode] = useState<AppMode>(() =>
+    modeFromPath(window.location.pathname),
+  );
+
   useEffect(() => {
-    getDashboard()
-      .then((result) => setDashboard(result.data))
-      .catch(() => undefined);
+    const syncPath = () => setCurrentMode(modeFromPath(window.location.pathname));
+    window.addEventListener("popstate", syncPath);
+    return () => window.removeEventListener("popstate", syncPath);
+  }, []);
+
+  useEffect(() => {
+    const canonical = modeRoutes[currentMode];
+    if (window.location.pathname !== canonical) {
+      window.history.replaceState(null, "", canonical);
+    }
+  }, [currentMode]);
+
+  useEffect(() => {
     const unsubscribe = subscribeToEvents((event) => {
       setApiStatus("live");
       setLastEvent(
-        event.type === "connected"
-          ? "Connected to server"
-          : `Server event: ${event.type}`,
+        event.type === "connected" ? "Connected to API" : event.type,
       );
     });
+
     const timeout = window.setTimeout(
       () =>
         setApiStatus((status) =>
@@ -61,141 +96,468 @@ function App() {
         ),
       3000,
     );
+
     return () => {
       window.clearTimeout(timeout);
       unsubscribe();
     };
   }, []);
-  const navItems =
-    mode === "admin"
-      ? [
-          "Overview",
-          "Live map",
-          "Drivers",
-          "Customers",
-          "Trips",
-          "Finance",
-          "Reports",
-        ]
-      : mode === "driver"
-        ? ["Dashboard", "Requests", "Earnings", "Trip history", "Profile"]
-        : ["Home", "Activity", "Wallet", "Profile"];
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">Z</span>
-          <span>
-            Zanzi <small>Ride</small>
-          </span>
-        </div>
-        <div className="mode-label">WORKSPACE</div>
-        <div className="role-switcher">
-          {(["passenger", "driver", "admin"] as Mode[]).map((item) => (
-            <button
-              className={mode === item ? "role active" : "role"}
-              key={item}
-              onClick={() => {
-                setMode(item);
-                setActiveNav(item === "passenger" ? "Home" : item === "driver" ? "Dashboard" : "Overview");
-                document.getElementById("workspace-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            >
-              {item === "passenger"
-                ? "Passenger"
-                : item === "driver"
-                  ? "Driver"
-                  : "Admin"}
-            </button>
-          ))}
-        </div>
-        <nav>
-          {navItems.map((item) => (
-            <button
-              className={item === activeNav ? "nav-item selected" : "nav-item"}
-              key={item}
-              onClick={() => {
-                setActiveNav(item);
-                setNotice(`${item} selected`);
-                document.getElementById("workspace-content")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            >
-              {item}
-              {item === "Requests" && <b>3</b>}
-            </button>
-          ))}
-        </nav>
-        <button className="sidebar-bottom" onClick={() => setNotice("Support contact opened")}>
-          <div>
-            <strong>Need help?</strong>
-            <small>Contact support</small>
-          </div>
-          <span>Open</span>
-        </button>
-      </aside>
+    <div className={`app-shell ${currentMode}-only`}>
       <main className="main-content">
-        <header className="topbar">
-          <button className="mobile-menu" onClick={() => setNotice("Menu ready")}>☰</button>
-          <div className="crumb">
-            Zanzi Ride /{" "}
-            <strong>{activeNav}</strong>
+        <header className="topbar passenger-topbar">
+          <div className="brand compact-brand">
+            <span className="brand-mark">Z</span>
+            <span>
+              {language === "sw" ? "Zanzi Ride" : "Zanzi Ride"}
+              <small>
+                {currentMode === "passenger"
+                  ? language === "sw"
+                    ? "App ya Mteja"
+                    : "Passenger App"
+                  : currentMode === "driver"
+                    ? language === "sw"
+                      ? "App ya Dereva"
+                      : "Driver App"
+                    : language === "sw"
+                      ? "App ya Msimamizi"
+                      : "Admin App"}
+              </small>
+            </span>
           </div>
+
           <div className="top-actions">
             <span className={`api-status ${apiStatus}`} title={lastEvent}>
-              <i /> API{" "}
-              {apiStatus === "live" ? "LIVE" : apiStatus.toUpperCase()}
+              <i /> API {apiStatus === "live" ? "LIVE" : apiStatus.toUpperCase()}
             </span>
             <div className="language-switcher" aria-label="Language">
-              <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")}>EN</button>
-              <button className={language === "sw" ? "active" : ""} onClick={() => setLanguage("sw")}>SW</button>
+              <button
+                className={language === "en" ? "active" : ""}
+                onClick={() => setLanguage("en")}
+              >
+                EN
+              </button>
+              <button
+                className={language === "sw" ? "active" : ""}
+                onClick={() => setLanguage("sw")}
+              >
+                SW
+              </button>
             </div>
-            <button className="icon-button" onClick={() => setNotice("Search opened")}>⌕</button>
-            <button className="icon-button notification" onClick={() => setNotice("No new notifications")}>
-              ♧<i />
-            </button>
             <div className="user-avatar">ZM</div>
             <div className="user-info">
               <strong>
-                {mode === "admin"
-                  ? "Zahra M."
-                  : mode === "driver"
-                    ? "Hassan Mwinyi"
-                    : "Zahra Mohamed"}
+                {currentMode === "passenger"
+                  ? language === "sw"
+                    ? "Mteja wa Zanzi"
+                    : "Zanzi passenger"
+                  : currentMode === "driver"
+                    ? language === "sw"
+                      ? "Dereva wa Zanzi"
+                      : "Zanzi driver"
+                    : language === "sw"
+                      ? "Msimamizi wa Zanzi"
+                      : "Zanzi admin"}
               </strong>
               <small>{lastEvent}</small>
             </div>
-            <span className="chevron">⌄</span>
           </div>
         </header>
-        {notice && <div className="action-notice" role="status">{notice}<button onClick={() => setNotice("")}>Close</button></div>}
-        <div id="workspace-content">
-        {mode === "passenger" && activeNav === "Home" && (
-          <Passenger
-            stage={stage}
-            setStage={setStage}
-            vehicle={vehicle}
-            setVehicle={setVehicle}
-          />
+
+        {notice && (
+          <div className="action-notice" role="status">
+            {notice}
+            <button onClick={() => setNotice("")}>Close</button>
+          </div>
         )}
-        {mode === "passenger" && activeNav !== "Home" && <WorkspaceView mode={mode} section={activeNav} language={language} />}
-        {mode === "driver" && activeNav === "Dashboard" && <Driver />}
-        {mode === "driver" && activeNav !== "Dashboard" && <WorkspaceView mode={mode} section={activeNav} language={language} />}
-        {mode === "admin" && activeNav === "Overview" && <Admin />}
-        {mode === "admin" && activeNav !== "Overview" && <WorkspaceView mode={mode} section={activeNav} language={language} />}
+
+        <div id="workspace-content">
+          {currentMode === "passenger" && (
+            <Passenger
+              stage={stage}
+              setStage={setStage}
+              vehicle={vehicle}
+              setVehicle={setVehicle}
+              language={language}
+            />
+          )}
+
+          {currentMode === "driver" && <DriverBoard language={language} />}
+          {currentMode === "admin" && <AdminBoard language={language} />}
         </div>
       </main>
     </div>
   );
 }
 
-function WorkspaceView({ mode, section, language }: { mode: Mode; section: string; language: Language }) {
-  const copy = language === "sw"
-    ? { activity: "Shughuli za safari", wallet: "Mkoba wa malipo", profile: "Wasifu wako", requests: "Maombi mapya", earnings: "Mapato yako", history: "Historia ya safari", overview: "Muhtasari", live: "Ramani ya moja kwa moja", drivers: "Madereva", customers: "Wateja", trips: "Safari", finance: "Fedha", reports: "Ripoti" }
-    : { activity: "Ride activity", wallet: "Payment wallet", profile: "Your profile", requests: "New ride requests", earnings: "Your earnings", history: "Trip history", overview: "Overview", live: "Live map", drivers: "Drivers", customers: "Customers", trips: "Trips", finance: "Finance", reports: "Reports" };
-  const labels: Record<string, string> = { Activity: copy.activity, Wallet: copy.wallet, Profile: copy.profile, Requests: copy.requests, Earnings: copy.earnings, "Trip history": copy.history, Overview: copy.overview, "Live map": copy.live, Drivers: copy.drivers, Customers: copy.customers, Trips: copy.trips, Finance: copy.finance, Reports: copy.reports };
-  const title = labels[section] ?? section;
-  return <div className="page workspace-view"><div className="page-heading"><div><p className="eyebrow">{mode.toUpperCase()} / {section.toUpperCase()}</p><h1>{title}</h1><p className="muted">{language === "sw" ? "Hapa ndipo taarifa zako zinaonekana." : "This section is ready for your next action."}</p></div><button className="outline-button" onClick={() => window.alert(`${title} opened`)}>{language === "sw" ? "Fungua" : "Open section"} →</button></div><div className="workspace-cards"><section className="panel workspace-hero"><span className="workspace-symbol">{mode === "admin" ? "▦" : mode === "driver" ? "◷" : "◉"}</span><h2>{title}</h2><p>{language === "sw" ? "Dhibiti taarifa, safari na mipangilio kutoka kwenye ukurasa huu." : "Manage the information, trips, and settings for this workspace from here."}</p><button className="primary-button small" onClick={() => window.alert(`${title} action started`)}>{language === "sw" ? "Anza" : "Start action"} <span>→</span></button></section><section className="panel workspace-list"><p className="eyebrow">{language === "sw" ? "MUHTASARI" : "SUMMARY"}</p>{[1, 2, 3].map((item) => <button key={item} onClick={() => window.alert(`${title} item ${item} selected`)}><span className="list-dot" />{language === "sw" ? `Kipengele ${item}` : `${title} item ${item}`}<b>→</b></button>)}</section></div></div>;
+function DriverBoard({ language }: { language: Language }) {
+  const [online, setOnline] = useState(true);
+  const [rides, setRides] = useState([
+    { id: "R-2041", status: "New booking", pickup: "Forodhani Gardens", destination: "Abeid Amani Karume Airport", vehicle: "Comfort", fare: "TSh 25,000" },
+    { id: "R-2042", status: "Accepted", pickup: "Stone Town", destination: "Nungwi Beach", vehicle: "XL", fare: "TSh 52,000" },
+  ]);
+
+  useEffect(() => {
+    fetch("/api/rides")
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload?.data?.length) setRides(payload.data.slice(0, 2));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  return (
+    <div className="page passenger-page">
+      <div className="passenger-hero">
+        <div>
+          <p className="eyebrow">{language === "sw" ? "ZINZI DRIVER" : "ZINZI DRIVER"}</p>
+          <h1>{language === "sw" ? "App ya dereva" : "Driver app"}</h1>
+          <p>{language === "sw" ? "Jisajili, pokea booking, chukua safari, na ufuate mapato yako kwa wakati halisi." : "Register, receive bookings, accept rides, and monitor your income in real time."}</p>
+        </div>
+        <div className="hero-fare-card">
+          <small>{language === "sw" ? "Mapato leo" : "Today income"}</small>
+          <strong>TSh 540,000</strong>
+          <span>{language === "sw" ? "Rating 4.9 • 18 trips" : "Rating 4.9 • 18 trips"}</span>
+        </div>
+      </div>
+
+      <div className="passenger-grid">
+        <section className="panel" style={{ padding: 22 }}>
+          <div className="booking-header">
+            <div>
+              <p className="eyebrow">{language === "sw" ? "PROFILE" : "PROFILE"}</p>
+              <h2>{language === "sw" ? "Mifumo ya dereva" : "Driver profile"}</h2>
+            </div>
+            <button className={online ? "primary-button" : "ghost-button"} onClick={() => setOnline(!online)} style={{ minHeight: 42, padding: "0 16px" }}>
+              {online ? (language === "sw" ? "Online" : "Online") : (language === "sw" ? "Offline" : "Offline")}
+            </button>
+          </div>
+
+          <div className="location-fields" style={{ paddingTop: 16 }}>
+            <div className="location-line location-card">
+              <span className="pin green">1</span>
+              <div>
+                <label>{language === "sw" ? "Jina" : "Name"}</label>
+                <strong>Hassan Mwinyi</strong>
+              </div>
+            </div>
+            <div className="location-line location-card">
+              <span className="pin green">2</span>
+              <div>
+                <label>{language === "sw" ? "Namba ya simu" : "Phone"}</label>
+                <strong>+255 712 000 000</strong>
+              </div>
+            </div>
+            <div className="location-line location-card">
+              <span className="pin green">3</span>
+              <div>
+                <label>{language === "sw" ? "License & Documents" : "License & Documents"}</label>
+                <strong>{language === "sw" ? "Picha na nyaraka zimetumwa" : "Photo and documents uploaded"}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="section-label">{language === "sw" ? "Booking mpya" : "New booking"}</div>
+          <div className="passenger-history" style={{ marginTop: 12 }}>
+            {rides.map((ride) => (
+              <div className="history-row" key={ride.id} style={{ marginBottom: 8 }}>
+                <div className="history-route">
+                  <b>{ride.destination}</b>
+                  <small>{ride.pickup}</small>
+                </div>
+                <div className="history-fare">
+                  <b>{ride.vehicle}</b>
+                  <small>{ride.status}</small>
+                </div>
+                <span>{ride.fare}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="journey-actions" style={{ marginTop: 18, gap: 10 }}>
+            <button className="primary-button" style={{ flex: 1 }}>{language === "sw" ? "Kubali" : "Accept"}</button>
+            <button className="ghost-button" style={{ flex: 1 }}>{language === "sw" ? "Kataa" : "Reject"}</button>
+          </div>
+        </section>
+
+        <section className="map-card">
+          <div className="map-toolbar">
+            <span className="map-tag">{language === "sw" ? "LIVE MAP" : "LIVE MAP"}</span>
+            <button>{language === "sw" ? "Naviga" : "Navigate"}</button>
+            <button>{language === "sw" ? "Anza safari" : "Start trip"}</button>
+          </div>
+          <div className="live-map-frame">
+            <iframe
+              title="Driver live map"
+              src="https://www.openstreetmap.org/export/embed.html?bbox=39.1181%2C-6.1905%2C39.2728%2C-6.1135&layer=mapnik&marker=-6.1622%2C39.1921"
+            />
+            <div className="driver-live-card">
+              <div className="driver-photo">HM</div>
+              <div>
+                <small>{language === "sw" ? "Mteja" : "Customer"}</small>
+                <b>Amina Ali</b>
+                <span>{language === "sw" ? "Stone Town → Airport · ETA 18 min" : "Stone Town → Airport · ETA 18 min"}</span>
+              </div>
+            </div>
+            <div className="map-bottom">
+              <span>Z</span>
+              <div>
+                <b>{language === "sw" ? "Safari inayoendelea" : "Trip in progress"}</b>
+                <small>{language === "sw" ? "Kuhamisha maelezo ya mteja kwenye ramani" : "Customer route visible on the live map"}</small>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function AdminBoard({ language }: { language: Language }) {
+  const [selectedTab, setSelectedTab] = useState("Dashboard");
+  const [stats] = useState([
+    { label: language === "sw" ? "Safari zinazoendelea" : "Trips in progress", value: "18" },
+    { label: language === "sw" ? "Drivers online" : "Drivers online", value: "42" },
+    { label: language === "sw" ? "Wateja" : "Customers", value: "1,240" },
+    { label: language === "sw" ? "Mapato" : "Revenue", value: "TSh 3.4M" },
+    { label: language === "sw" ? "Commission" : "Commission", value: "TSh 510K" },
+    { label: language === "sw" ? "Malalamiko" : "Complaints", value: "06" },
+    { label: language === "sw" ? "Uthibitisho wa dereva" : "Driver verification", value: "96%" },
+    { label: language === "sw" ? "Bei" : "Pricing", value: "Updated" },
+    { label: language === "sw" ? "Promos" : "Promotions", value: "04" },
+    { label: language === "sw" ? "Ripoti" : "Reports", value: "Live" },
+  ]);
+
+  const drivers = [
+    { name: "Driver 001", area: "Stone Town", status: "On trip" },
+    { name: "Driver 002", area: "Airport", status: "Available" },
+    { name: "Driver 003", area: "Nungwi", status: "On trip" },
+  ];
+
+  const menuItems = [
+    { label: language === "sw" ? "Dashibodi" : "Dashboard" },
+    { label: language === "sw" ? "Wadereva" : "Drivers" },
+    { label: language === "sw" ? "Safari" : "Trips" },
+    { label: language === "sw" ? "Ripoti" : "Reports" },
+    { label: language === "sw" ? "Mipangilio" : "Settings" },
+  ];
+
+  const activeSection =
+    selectedTab === "Dashboard"
+      ? "dashboard"
+      : selectedTab === "Drivers"
+        ? "drivers"
+        : selectedTab === "Trips"
+          ? "trips"
+          : selectedTab === "Reports"
+            ? "reports"
+            : "settings";
+
+  return (
+    <div className="page passenger-page" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)", gap: 18 }}>
+      <aside className="panel" style={{ padding: 18, alignSelf: "start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+          <div className="brand-mark" style={{ width: 30, height: 30, borderRadius: 10, display: "grid", placeItems: "center" }}>Z</div>
+          <div>
+            <strong>Zanzi Ride</strong>
+            <small style={{ display: "block", color: "#6d8177" }}>{language === "sw" ? "Admin" : "Admin"}</small>
+          </div>
+        </div>
+
+        <nav style={{ display: "grid", gap: 8 }}>
+          {menuItems.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => setSelectedTab(item.label)}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: selectedTab === item.label ? "1px solid #1f755d" : "1px solid #e4ece6",
+                background: selectedTab === item.label ? "#edf7ee" : "#fff",
+                color: selectedTab === item.label ? "#153b34" : "#3d554e",
+                textAlign: "left",
+                fontWeight: 700,
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <section style={{ minWidth: 0 }}>
+        <div className="passenger-hero">
+          <div>
+            <p className="eyebrow">{language === "sw" ? "ADMIN DASHBOARD" : "ADMIN DASHBOARD"}</p>
+            <h1>{selectedTab}</h1>
+            <p>{language === "sw" ? "Fuatilia ramani ya maisha, watendaji, mapato, na utendaji wa biashara ya Zanzi Ride kwa haraka." : "Monitor the live fleet, driver status, commission, and business performance for Zanzi Ride in one place."}</p>
+          </div>
+          <div className="hero-fare-card">
+            <small>{language === "sw" ? "Mapato ya leo" : "Revenue today"}</small>
+            <strong>TSh 3,400,000</strong>
+            <span>{language === "sw" ? "Commission 15%" : "Commission 15%"}</span>
+          </div>
+        </div>
+
+        {activeSection === "dashboard" && (
+          <>
+            <div className="admin-stats" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(120px, 1fr))", gap: 12, margin: "18px 0" }}>
+              {stats.map((stat) => (
+                <div key={stat.label} className="panel" style={{ padding: "16px 14px" }}>
+                  <small>{stat.label}</small>
+                  <h3 style={{ margin: "8px 0 0" }}>{stat.value}</h3>
+                </div>
+              ))}
+            </div>
+
+            <div className="passenger-grid">
+              <section className="panel" style={{ padding: 18 }}>
+                <div className="booking-header">
+                  <div>
+                    <p className="eyebrow">{language === "sw" ? "LIVE MAP" : "LIVE MAP"}</p>
+                    <h2>{language === "sw" ? "Usafiri wa wakati halisi" : "Live fleet view"}</h2>
+                  </div>
+                </div>
+                <div className="live-map-frame" style={{ marginTop: 12 }}>
+                  <iframe
+                    title="Admin live map"
+                    src="https://www.openstreetmap.org/export/embed.html?bbox=39.1218%2C-6.1958%2C39.2745%2C-6.1024&layer=mapnik&marker=-6.1622%2C39.1921"
+                  />
+                  <div className="map-bottom">
+                    <span>Z</span>
+                    <div>
+                      <b>{language === "sw" ? "Wadereva wanaotumika" : "Active drivers"}</b>
+                      <small>{language === "sw" ? "Driver 001 — Stone Town · Driver 002 — Airport · Driver 003 — Nungwi" : "Driver 001 — Stone Town · Driver 002 — Airport · Driver 003 — Nungwi"}</small>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel" style={{ padding: 18 }}>
+                <div className="booking-header">
+                  <div>
+                    <p className="eyebrow">{language === "sw" ? "OPERATIONS" : "OPERATIONS"}</p>
+                    <h2>{language === "sw" ? "Taarifa za usimamizi" : "Management overview"}</h2>
+                  </div>
+                </div>
+
+                <div className="passenger-history" style={{ marginTop: 12 }}>
+                  {drivers.map((driver) => (
+                    <div className="history-row" key={driver.name} style={{ marginBottom: 8 }}>
+                      <div className="history-route">
+                        <b>{driver.name}</b>
+                        <small>{driver.area}</small>
+                      </div>
+                      <div className="history-fare">
+                        <b>{language === "sw" ? "Hali" : "Status"}</b>
+                        <small>{driver.status}</small>
+                      </div>
+                      <span>{language === "sw" ? "Angalia" : "View"}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="fare-row" style={{ marginTop: 18 }}>
+                  <div>
+                    <small>{language === "sw" ? "Mfumo wa malipo" : "Payment system"}</small>
+                    <strong>{language === "sw" ? "Cash + Mobile Money" : "Cash + Mobile Money"}</strong>
+                  </div>
+                  <span className="cash-badge">{language === "sw" ? "Card · Wallet · Corporate" : "Card · Wallet · Corporate"}</span>
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+
+        {activeSection === "drivers" && (
+          <div className="panel" style={{ padding: 20 }}>
+            <h2>{language === "sw" ? "Wadereva" : "Drivers"}</h2>
+            <div className="passenger-history" style={{ marginTop: 16 }}>
+              {drivers.map((driver) => (
+                <div className="history-row" key={driver.name} style={{ marginBottom: 8 }}>
+                  <div className="history-route">
+                    <b>{driver.name}</b>
+                    <small>{driver.area}</small>
+                  </div>
+                  <div className="history-fare">
+                    <b>{language === "sw" ? "Hali" : "Status"}</b>
+                    <small>{driver.status}</small>
+                  </div>
+                  <span>{language === "sw" ? "Verified" : "Verified"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeSection === "trips" && (
+          <div className="panel" style={{ padding: 20 }}>
+            <h2>{language === "sw" ? "Safari" : "Trips"}</h2>
+            <div className="passenger-history" style={{ marginTop: 16 }}>
+              {[
+                { id: "R-2041", route: "Stone Town → Airport", amount: "TSh 25,000", status: "In progress" },
+                { id: "R-2042", route: "Stone Town → Nungwi", amount: "TSh 52,000", status: "Completed" },
+                { id: "R-2043", route: "Airport → Unguja", amount: "TSh 18,500", status: "Accepted" },
+              ].map((trip) => (
+                <div className="history-row" key={trip.id} style={{ marginBottom: 8 }}>
+                  <div className="history-route">
+                    <b>{trip.id}</b>
+                    <small>{trip.route}</small>
+                  </div>
+                  <div className="history-fare">
+                    <b>{trip.amount}</b>
+                    <small>{trip.status}</small>
+                  </div>
+                  <span>{language === "sw" ? "View" : "View"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeSection === "reports" && (
+          <div className="panel" style={{ padding: 20 }}>
+            <h2>{language === "sw" ? "Ripoti" : "Reports"}</h2>
+            <div className="fare-row" style={{ marginTop: 16 }}>
+              <div>
+                <small>{language === "sw" ? "Mapato ya mwezi" : "Monthly revenue"}</small>
+                <strong>TSh 18,400,000</strong>
+              </div>
+              <span className="cash-badge">+12.8%</span>
+            </div>
+            <div className="fare-row" style={{ marginTop: 12 }}>
+              <div>
+                <small>{language === "sw" ? "Ajira ya dereva" : "Driver productivity"}</small>
+                <strong>96%</strong>
+              </div>
+              <span className="cash-badge">Healthy</span>
+            </div>
+          </div>
+        )}
+
+        {activeSection === "settings" && (
+          <div className="panel" style={{ padding: 20 }}>
+            <h2>{language === "sw" ? "Mipangilio" : "Settings"}</h2>
+            <div className="fare-row" style={{ marginTop: 16 }}>
+              <div>
+                <small>{language === "sw" ? "Malipo" : "Payments"}</small>
+                <strong>{language === "sw" ? "Cash + Mobile Money" : "Cash + Mobile Money"}</strong>
+              </div>
+              <span className="cash-badge">{language === "sw" ? "Updated" : "Updated"}</span>
+            </div>
+            <div className="fare-row" style={{ marginTop: 12 }}>
+              <div>
+                <small>{language === "sw" ? "Uchaguzi wa bei" : "Pricing"}</small>
+                <strong>{language === "sw" ? "Zanzibar standard" : "Zanzibar standard"}</strong>
+              </div>
+              <span className="cash-badge">{language === "sw" ? "Active" : "Active"}</span>
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
 function Passenger({
@@ -203,516 +565,627 @@ function Passenger({
   setStage,
   vehicle,
   setVehicle,
+  language,
 }: {
   stage: RideStage;
   setStage: (stage: RideStage) => void;
   vehicle: string;
   setVehicle: (vehicle: string) => void;
+  language: Language;
 }) {
-  const [tab, setTab] = useState<"book" | "schedule">("book");
-  const [destination, setDestination] = useState("Enter destination");
-  const [zoom, setZoom] = useState(1);
+  const [destination, setDestination] = useState("");
   const [rideError, setRideError] = useState("");
   const [rideId, setRideId] = useState("");
+  const destinationInputRef = useRef<HTMLInputElement | null>(null);
+  const isSwahili = language === "sw";
+  const text = {
+    appTitle: isSwahili ? "Zanzi Ride" : "Zanzi Ride",
+    heroTitle: isSwahili ? "Uko wapi unakwenda" : "Where are you going",
+    heroSubtitle: isSwahili
+      ? "Ingiza sehemu ya kukokota na ya kufika, chagua aina ya gari, angalia makadirio ya bei, na uombe safari."
+      : "Enter pickup and destination, choose the car type, check the estimated price, then request your ride.",
+    rideRequest: isSwahili ? "Omba safari" : "Request Ride",
+    tripDetails: isSwahili ? "Maelezo ya safari" : "Trip details",
+    pickupLocation: isSwahili ? "Mahali pa kukokota" : "Pickup location",
+    destination: isSwahili ? "Destinasi" : "Destination",
+    vehicleType: isSwahili ? "Aina ya gari" : "Car type",
+    estimatedFare: isSwahili ? "Makadirio ya bei" : "Estimated fare",
+    payment: isSwahili ? "Malipo" : "Payment",
+    requestRide: isSwahili ? "Omba safari" : "Request Ride",
+    useLiveLocation: isSwahili ? "Tumia eneo la moja kwa moja" : "Use live location",
+    openMap: isSwahili ? "Fungua ramani" : "Open map",
+    driverOnMap: isSwahili ? "Kuona dereva kwenye ramani" : "See driver on map",
+    driverName: isSwahili ? "Jina + picha ya dereva" : "Driver name + photo",
+    carPlate: isSwahili ? "Namba ya gari" : "Car number plate",
+    eta: isSwahili ? "ETA" : "ETA",
+    call: isSwahili ? "Piga simu" : "Call",
+    chat: isSwahili ? "Chat" : "Chat",
+    rating: isSwahili ? "Rating ⭐" : "Rating ⭐",
+    tripHistory: isSwahili ? "Historia ya safari" : "Trip history",
+    noFees: isSwahili ? "Hakuna ada za siri" : "No hidden fees",
+    driverInfo: isSwahili ? "Taarifa ya dereva yataheshimiwa kabla ya kukokotwa" : "Driver details shown before pickup",
+    ready: isSwahili ? "Tayari" : "Ready",
+    active: isSwahili ? "Inafanya kazi" : "Active",
+    noPrice: isSwahili ? "Bado hakuna bei" : "No price yet",
+    bookingMessage: isSwahili ? "Jina na plate ya gari yataheshimiwa baada ya dereva kukutafuta" : "You will see the driver, plate number, ETA, call, and chat before pickup.",
+    driverFound: isSwahili ? "Dereva amepatikana" : "Driver found",
+    lookingForDriver: isSwahili ? "Tunatafuta dereva karibu" : "Looking for a nearby driver",
+    requestSent: isSwahili ? "Maombi yametumwa" : "Ride requested",
+    rideInProgress: isSwahili ? "Safari inaendelea" : "Trip in progress",
+    driverReady: isSwahili ? "Hassan yuko dakika 4 away" : "Hassan is 4 minutes away",
+    rateTrip: isSwahili ? "Pima safari" : "Rate the ride",
+    completed: isSwahili ? "Safari imekamilika" : "Trip complete",
+    paymentSummary: isSwahili ? "Malipo" : "Payment",
+    done: isSwahili ? "Imekamilika" : "Done",
+    startTrip: isSwahili ? "Anza safari" : "Start trip",
+    endTrip: isSwahili ? "Maliza safari" : "End trip",
+    actionReady: isSwahili ? "Tayari kuomba safari" : "Ready to request a ride",
+    driverDetails: isSwahili ? "Taarifa za dereva" : "Driver details",
+    yourDriver: isSwahili ? "Dereva wako" : "Your driver",
+    enterDestinationFirst: isSwahili ? "Andika sehemu ya kufika kwanza" : "Enter destination first",
+    selectListedDestination: isSwahili ? "Chagua sehemu iliyoorodheshwa ili kukokotoa bei" : "Select a listed destination",
+    priceAppears: isSwahili ? "Bei itaonekana baada ya sehemu ya kukokota na ya kufika" : "Price appears after pickup and destination",
+    liveLocationUnsupported: isSwahili ? "Eneo la moja kwa moja halitumiki kwenye kivinjari hiki" : "Live location is not supported in this browser",
+    gettingLocation: isSwahili ? "Tunapata eneo lako la moja kwa moja..." : "Getting your live location...",
+    locationConfirmed: isSwahili ? "Eneo la kukokota limehakikishwa ndani ya" : "Live pickup confirmed within",
+    allowLocation: isSwahili ? "Ruhusu ufikiaji wa eneo ili kutumia sehemu ya kukokota" : "Allow location access to use live pickup",
+    activeLocation: isSwahili ? "Eneo la moja kwa moja linatumika ndani ya" : "Live location active within",
+    pausedLocation: isSwahili ? "Eneo la moja kwa moja limesitishwa. Angalia ruhusa ya kivinjari." : "Live location paused. Check browser permission.",
+    chooseDestination: isSwahili ? "Chagua sehemu ya kufika kwanza" : "Choose a destination first",
+    requestRideError: isSwahili ? "Chagua sehemu ya kufika ili kuhesabu bei ya safari." : "Select a listed destination so we can calculate the route price.",
+    rideRequested: isSwahili ? "Safari imeandikiwa. Tunatafuta dereva karibu." : "Ride requested. Looking for a nearby driver.",
+    rideRequestCancelled: isSwahili ? "Maombi ya safari yameghairiwa" : "Ride request cancelled",
+    cancel: isSwahili ? "Ghairi" : "Cancel",
+    vehiclePlate: isSwahili ? "Namba ya gari" : "Vehicle plate",
+    onWayTo: isSwahili ? "Katika safari ya kuelekea Abeid Amani Karume Airport" : "On the way to Abeid Amani Karume Airport",
+    eta18: isSwahili ? "ETA 18 dakika. Weka malipo tayari kufika." : "ETA 18 minutes. Keep payment ready for arrival.",
+    endTripAndPay: isSwahili ? "Maliza safari na ulipie" : "End trip and pay",
+    tripComplete: isSwahili ? "SAFARI IMEKAMILIKA" : "TRIP COMPLETE",
+    rateRide: isSwahili ? "Pima safari" : "Rate the ride",
+    paymentLabel: isSwahili ? "Malipo" : "Payment",
+    close: isSwahili ? "Funga" : "Close",
+    searching: isSwahili ? "Inatafuta" : "Searching",
+    booking: isSwahili ? "Maelezo ya booking" : "Booking",
+    ratingSelected: (stars: number) => isSwahili ? `Uchaguzi wa rating: nyota ${stars}` : `Rating selected: ${stars} stars`,
+    rideId: isSwahili ? "ID ya safari" : "Ride ID",
+    chooseDestinationPrompt: isSwahili ? "Wapi unakoenda?" : "Where are you going?",
+  };
+  const [passengerAction, setPassengerAction] = useState(
+    isSwahili ? "Tayari kuomba safari" : "Ready to request a ride",
+  );
+  const [paymentMethod, setPaymentMethod] = useState(isSwahili ? "Cash" : "Cash");
+  const [liveLocation, setLiveLocation] = useState<LatLng | null>(null);
+  const [locationStatus, setLocationStatus] = useState(() =>
+    "geolocation" in navigator
+      ? isSwahili ? "Gusa Use live location kuthibitisha kukokota" : "Tap Use live location to confirm pickup"
+      : text.liveLocationUnsupported,
+  );
+  const defaultLocation: LatLng = { lat: -6.1622, lng: 39.1921 };
+  const mapCenter = liveLocation ?? defaultLocation;
+
+  const knownDestinations: Record<string, LatLng> = {
+    "Abeid Amani Karume Airport": { lat: -6.222, lng: 39.2249 },
+    "Nungwi Beach": { lat: -5.7264, lng: 39.2987 },
+    "Stone Town Ferry Terminal": { lat: -6.1581, lng: 39.1897 },
+  };
+
+  const selectedDestination = Object.entries(knownDestinations).find(
+    ([place]) => place.toLowerCase() === destination.trim().toLowerCase(),
+  );
+
+  const routeDistanceKm = selectedDestination
+    ? getDistanceKm(mapCenter, selectedDestination[1])
+    : null;
+
+  const fareEstimate = routeDistanceKm !== null
+    ? estimateFare(vehicle, routeDistanceKm)
+    : null;
+
+  const fareDisplay = !destination.trim()
+    ? text.enterDestinationFirst
+    : fareEstimate ?? text.selectListedDestination;
+
+  const rideOptions = [
+    ["Boda", isSwahili ? "Pikipiki" : "Motorbike", isSwahili ? "Kiburi cha safari fupi" : "Best for quick short trips", "2"],
+    ["Comfort", isSwahili ? "Gari" : "Car", isSwahili ? "Safi kwa safari za kila siku" : "Good for daily rides", "4"],
+    ["XL", isSwahili ? "Gari kubwa" : "Large car", isSwahili ? "Kituo cha mizigo zaidi" : "More space for bags", "6"],
+  ];
+  const mapBox = {
+    left: mapCenter.lng - 0.018,
+    right: mapCenter.lng + 0.018,
+    bottom: mapCenter.lat - 0.014,
+    top: mapCenter.lat + 0.014,
+  };
+  const livePickupLabel = liveLocation
+    ? `${isSwahili ? "Eneo la moja kwa moja" : "Live location"}: ${liveLocation.lat.toFixed(5)}, ${liveLocation.lng.toFixed(5)}`
+    : isSwahili ? "Forodhani Gardens, Stone Town" : "Forodhani Gardens, Stone Town";
+  const mapSource = `https://www.openstreetmap.org/export/embed.html?bbox=${mapBox.left}%2C${mapBox.bottom}%2C${mapBox.right}%2C${mapBox.top}&layer=mapnik&marker=${mapCenter.lat}%2C${mapCenter.lng}`;
+  const liveTracking = liveLocation !== null;
+
+  const useLiveLocation = () => {
+    if (!("geolocation" in navigator)) {
+      setLocationStatus(text.liveLocationUnsupported);
+      return;
+    }
+
+    setLocationStatus(text.gettingLocation);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLiveLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+        setLocationStatus(
+          `${text.locationConfirmed} ${Math.round(position.coords.accuracy)} m`,
+        );
+        setPassengerAction(isSwahili ? "Eneo la kukokota limebadilishwa" : "Pickup updated to live location");
+      },
+      () => {
+        setLocationStatus(text.allowLocation);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 },
+    );
+  };
+
+  useEffect(() => {
+    if (!liveTracking || !("geolocation" in navigator)) return undefined;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setLiveLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+        setLocationStatus(
+          `${text.activeLocation} ${Math.round(position.coords.accuracy)} m`,
+        );
+      },
+      () => setLocationStatus(text.pausedLocation),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [liveTracking]);
+
   const requestRide = () => {
     if (stage !== "home") {
-      setStage(stage === "searching" ? "found" : stage === "found" ? "trip" : "rating");
+      setStage(
+        stage === "searching" ? "found" : stage === "found" ? "trip" : "rating",
+      );
       return;
     }
-    if (destination === "Enter destination") {
-      setRideError("Choose a destination first");
+
+    if (!destination.trim()) {
+      setRideError(text.chooseDestination);
       return;
     }
-    createRide({ pickup: "Forodhani Gardens, Stone Town", destination, vehicle, paymentMethod: "cash" })
+
+    if (!fareEstimate) {
+      setRideError(text.requestRideError);
+      return;
+    }
+
+    createRide({
+      pickup: livePickupLabel,
+      destination,
+      vehicle,
+      paymentMethod,
+    })
       .then((result) => {
         setRideId(result.data.id);
         setRideError("");
+        setPassengerAction(text.rideRequested);
         setStage("searching");
       })
-      .catch(() => setRideError("Server is unavailable. Start python server/app.py."));
+      .catch(() => setRideError(isSwahili ? "Anza Flask server ili kuomba safari." : "Start the Flask server to request a ride."));
   };
+
+  const callDriver = () => {
+    setPassengerAction(isSwahili ? "Inapiga simu Hassan Mwinyi" : "Calling Hassan Mwinyi");
+    window.location.href = "tel:+255712000000";
+  };
+
+  const chatDriver = () => {
+    setPassengerAction(isSwahili ? "Fungua mazungumzo na Hassan Mwinyi" : "Opening chat with Hassan Mwinyi");
+    window.location.href = "sms:+255712000000";
+  };
+
+  const openMap = () => {
+    window.open(
+      `https://www.openstreetmap.org/?mlat=${mapCenter.lat}&mlon=${mapCenter.lng}#map=16/${mapCenter.lat}/${mapCenter.lng}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
   return (
     <div className="page passenger-page">
-      <div className="page-heading">
+      <div className="passenger-hero">
         <div>
-          <p className="eyebrow">
-            GOOD MORNING, ZAHRA <span>✦</span>
-          </p>
-          <h1>Where are you going?</h1>
-          <p className="muted">
-            Your island, your ride. Move freely around Zanzibar.
-          </p>
+          <p className="eyebrow">{text.appTitle}</p>
+          <h1>{text.heroTitle}</h1>
+          <p>{text.heroSubtitle}</p>
         </div>
-        <div className="status-pill">
-          <span /> Zanzibar · 28°C
+        <div className="hero-fare-card">
+          <small>Makadirio ya bei</small>
+          <strong>{fareDisplay}</strong>
+          <span>
+            {fareEstimate && routeDistanceKm
+              ? `${vehicle} ride - ${routeDistanceKm.toFixed(1)} km - ${paymentMethod}`
+              : text.priceAppears}
+          </span>
         </div>
       </div>
+
       <div className="passenger-grid">
         <section className="booking-panel panel">
-          <div className="panel-tabs">
-            <button className={tab === "book" ? "tab active" : "tab"} onClick={() => setTab("book")}>Book a ride</button>
-            <button className={tab === "schedule" ? "tab active" : "tab"} onClick={() => setTab("schedule")}>Schedule</button>
+          <div className="booking-header">
+            <div>
+              <p className="eyebrow">{isSwahili ? "OMBA SAFARI" : "REQUEST RIDE"}</p>
+              <h2>{text.tripDetails}</h2>
+            </div>
+            <span>{text.active}</span>
           </div>
+
           <div className="location-fields">
-            <div className="location-line">
-              <span className="pin green">●</span>
+            <div className="location-line location-card">
+              <span className="pin green">1</span>
               <div>
-                <label>Pickup location</label>
-                <strong>Forodhani Gardens, Stone Town</strong>
+                <label>{text.pickupLocation}</label>
+                <strong>{livePickupLabel}</strong>
+                <small>{locationStatus}</small>
               </div>
-              <span className="cross">×</span>
+              <button className="location-action" onClick={useLiveLocation}>
+                Use live location
+              </button>
             </div>
             <div className="route-line" />
-            <div className="location-line">
-              <span className="pin red">●</span>
+            <div
+              className="location-line location-card destination-click-area"
+              onClick={() => destinationInputRef.current?.focus()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  destinationInputRef.current?.focus();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Where are you going?"
+            >
+              <span className="pin red">2</span>
               <div>
-                <label>Where to?</label>
-                <strong className="placeholder">{destination}</strong>
+                <label>{text.destination}</label>
+                <input
+                  ref={destinationInputRef}
+                  aria-label="Destination"
+                  className="destination-input"
+                  onChange={(event) => {
+                    setDestination(event.target.value);
+                    setRideError("");
+                    setPassengerAction(isSwahili ? "Destinasi imebadilishwa" : "Destination updated");
+                  }}
+                  value={destination}
+                  placeholder={isSwahili ? "Wapi unakoenda?" : "Where are you going?"}
+                  onClick={(event) => event.stopPropagation()}
+                />
               </div>
-              <span className="cross">⌕</span>
             </div>
           </div>
-          <div className="quick-locations">
-            <span>Recent</span>
-            <button onClick={() => setDestination("Maruhubi Palace")}>
-              ⌖ <b>Maruhubi Palace</b>
-              <small>6.4 km</small>
-            </button>
-            <button onClick={() => setDestination("Abeid Amani Karume Airport")}>
-              ⌖ <b>Abeid Amani Karume Airport</b>
-              <small>8.1 km</small>
-            </button>
-          </div>
-          <div className="section-label">Choose your ride</div>
-          <div className="ride-options">
-            {[
-              ["Boda", "♧", "From TSh 2,000"],
-              ["Comfort", "▱", "From TSh 8,500"],
-              ["XL", "▰", "From TSh 12,000"],
-            ].map(([name, icon, price]) => (
+
+          <div className="compact-destinations" aria-label={isSwahili ? "Sehemu maarufu" : "Popular destinations"}>
+            {Object.keys(knownDestinations).map((place) => (
               <button
-                key={name}
-                className={
-                  vehicle === name ? "ride-option active" : "ride-option"
-                }
-                onClick={() => setVehicle(name)}
+                className={destination === place ? "active" : ""}
+                key={place}
+                onClick={() => {
+                  setDestination(place);
+                  setRideError("");
+                  setPassengerAction(isSwahili ? "Destinasi imechaguliwa" : "Destination selected");
+                }}
               >
-                <span className="vehicle-icon">{icon}</span>
-                <b>{name}</b>
-                <small>{price}</small>
-                {vehicle === name && <span className="check">✓</span>}
+                {place}
               </button>
             ))}
           </div>
+
+          <div className="section-label">{text.vehicleType}</div>
+          <div className="ride-options">
+            {rideOptions.map(([name, type, detail, seats]) => (
+              <button
+                className={vehicle === name ? "ride-option active" : "ride-option"}
+                key={name}
+                onClick={() => {
+                  setVehicle(name);
+                  setPassengerAction(isSwahili ? `${name} imechaguliwa` : `${name} selected`);
+                }}
+              >
+                <span className="vehicle-icon">{seats}</span>
+                <b>{name}</b>
+                <small>{type}</small>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+
           <div className="fare-row">
             <div>
-              <small>Estimated fare</small>
-              <strong>
-                {vehicle === "Boda"
-                  ? "TSh 2,000 – 4,000"
-                  : vehicle === "XL"
-                    ? "TSh 12,000 – 16,000"
-                    : "TSh 8,500 – 11,000"}
-              </strong>
+              <small>{text.estimatedFare}</small>
+              <strong>{fareDisplay}</strong>
             </div>
-            <span className="cash-badge">▣ Cash</span>
+            <span className="cash-badge">
+              {fareEstimate ? `${routeDistanceKm?.toFixed(1)} km route` : text.noPrice}
+            </span>
           </div>
-          <button
-            className="primary-button"
-            onClick={requestRide}
-          >
-            {stage === "home"
-              ? "Request ride"
-              : stage === "searching"
-                ? "Finding your driver…"
-                : stage === "found"
-                  ? "Confirm ride"
-                  : stage === "trip"
-                    ? "Complete trip"
-                    : "Rate your ride"}{" "}
-            <span>→</span>
+
+          <div className="section-label">{text.payment}</div>
+          <div className="payment-methods" aria-label="Payment method">
+            {["Cash", "M-Pesa", "Airtel Money"].map((method) => (
+              <button
+                className={paymentMethod === method ? "active" : ""}
+                key={method}
+                onClick={() => {
+                  setPaymentMethod(method);
+                  setPassengerAction(isSwahili ? `${method} imechaguliwa` : `${method} selected`);
+                }}
+              >
+                {method}
+              </button>
+            ))}
+          </div>
+
+          <button className="primary-button" onClick={requestRide}>
+            {stage === "searching"
+              ? isSwahili ? "Onesha dereva" : "Show driver"
+              : stage === "found"
+                ? text.startTrip
+                : stage === "trip"
+                  ? text.endTrip
+                  : text.requestRide}
+            <span>{isSwahili ? "Endelea" : "Next"}</span>
           </button>
-          {rideError && <small className="ride-error" role="alert">{rideError}</small>}
+          <div className="booking-footnote">
+            <span>{text.noFees}</span>
+            <span>{text.driverInfo}</span>
+          </div>
+          {rideError && (
+            <small className="ride-error" role="alert">
+              {rideError}
+            </small>
+          )}
           {rideId && <small className="ride-id">Ride ID: {rideId}</small>}
         </section>
+
         <section className="map-card">
           <div className="map-toolbar">
-            <span className="map-tag">LIVE MAP</span>
-            <button onClick={() => setZoom((value) => Math.min(value + 0.1, 1.3))}>＋</button>
-            <button onClick={() => setZoom((value) => Math.max(value - 0.1, 0.8))}>−</button>
+            <span className="map-tag">{text.driverOnMap}</span>
+            <button onClick={useLiveLocation}>Use live location</button>
+            <button onClick={openMap}>{text.openMap}</button>
           </div>
-          <div className="map-grid" style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}>
-            <div className="map-water">
-              ZANZIBAR
-              <br />
-              <small>CHANNEL</small>
+          <div className="live-map-frame">
+            <iframe
+              aria-label="Live pickup location map"
+              src={mapSource}
+              title="Live pickup location map"
+            />
+            <div className="live-pickup-card">
+              <span>1</span>
+              <div>
+                <b>{text.pickupLocation}</b>
+                <small>{livePickupLabel}</small>
+              </div>
             </div>
-            <div className="route route-one" />
-            <div className="route route-two" />
-            <div className="road road-a" />
-            <div className="road road-b" />
-            <div className="map-label label-stone">STONE TOWN</div>
-            <div className="map-label label-airport">AIRPORT</div>
-            <div className="map-pin pickup">
-              ●<small>You</small>
-            </div>
-            <div className="map-pin car car-one">◆</div>
-            <div className="map-pin car car-two">◆</div>
-            <div className="map-pin destination">●</div>
+            {stage !== "home" && (
+              <div className="driver-live-card">
+                <div className="driver-photo">HM</div>
+                <div>
+                  <small>{text.driverName}</small>
+                  <b>Hassan Mwinyi</b>
+                  <span>{isSwahili ? "Namba ya gari: Z 428 HMM - ETA: 4 min" : "Car number: Z 428 HMM - ETA: 4 min"}</span>
+                </div>
+                <button onClick={callDriver}>{text.call}</button>
+                <button onClick={chatDriver}>{text.chat}</button>
+              </div>
+            )}
             <div className="map-bottom">
-              <span>◉</span>
+              <span>Z</span>
               <div>
                 <b>
-                  {stage === "home"
-                    ? "Ready when you are"
-                    : stage === "searching"
-                      ? "Finding nearby drivers"
-                      : stage === "found"
-                        ? "Driver found · 4 min away"
-                        : "Your trip is in progress"}
+                  {stage === "searching"
+                    ? (isSwahili ? "Tunatafuta dereva karibu" : "Finding a nearby driver")
+                    : stage === "found"
+                      ? (isSwahili ? "Hassan yuko dakika 4 away" : "Hassan is 4 minutes away")
+                      : stage === "trip"
+                        ? (isSwahili ? "Safari inaendelea" : "Trip in progress")
+                        : (isSwahili ? "Chagua destinasi kuanza" : "Choose a destination to start")}
                 </b>
                 <small>
                   {stage === "home"
-                    ? "Set your destination to get started"
-                    : "Live location updates enabled"}
+                    ? (fareEstimate && routeDistanceKm ? `${vehicle} - ${routeDistanceKm.toFixed(1)} km - ${paymentMethod}` : text.priceAppears)
+                    : text.bookingMessage}
                 </small>
               </div>
             </div>
           </div>
         </section>
       </div>
-      <section className="blueprint">
+
+      <PassengerJourney
+        callDriver={callDriver}
+        chatDriver={chatDriver}
+        isSwahili={isSwahili}
+        rideId={rideId}
+        setPassengerAction={setPassengerAction}
+        setStage={setStage}
+        stage={stage}
+        text={text}
+      />
+
+      <div className="passenger-action-status" role="status">
+        {passengerAction}
+      </div>
+    </div>
+  );
+}
+
+function PassengerJourney({
+  callDriver,
+  chatDriver,
+  isSwahili,
+  stage,
+  setStage,
+  rideId,
+  setPassengerAction,
+  text,
+}: {
+  callDriver: () => void;
+  chatDriver: () => void;
+  isSwahili: boolean;
+  stage: RideStage;
+  setStage: (stage: RideStage) => void;
+  rideId: string;
+  setPassengerAction: (message: string) => void;
+  text: {
+    lookingForDriver: string;
+    cancel: string;
+    rideRequestCancelled: string;
+    searching: string;
+    driverFound: string;
+    carPlate: string;
+    payment: string;
+    eta: string;
+    call: string;
+    chat: string;
+    startTrip: string;
+    onWayTo: string;
+    eta18: string;
+    endTripAndPay: string;
+    done: string;
+    tripComplete: string;
+    rateRide: string;
+    paymentLabel: string;
+    ratingSelected: (stars: number) => string;
+    close: string;
+  };
+}) {
+  if (stage === "home") {
+    return null;
+  }
+
+  if (stage === "searching") {
+    return (
+      <section className="journey-panel panel searching-panel">
+        <div className="journey-loader" />
         <div>
-          <p className="eyebrow">ZANZI RIDE APP BLUEPRINT</p>
-          <h2>Every step, thoughtfully connected.</h2>
+          <p className="eyebrow">{isSwahili ? "SAFARI IMEOMBIWA" : "RIDE REQUESTED"}</p>
+          <h2>{text.lookingForDriver}</h2>
+          <p className="muted">{isSwahili ? "Maombi yako yamepelekwa kwa madereva walioko karibu na Stone Town." : "Your request has been sent to available drivers near Stone Town."}</p>
+          <small>{rideId ? `${isSwahili ? "Booking" : "Booking"} ${rideId}` : text.searching}</small>
         </div>
-        <div className="flow">
-          {[
-            "Splash",
-            "Login",
-            "Home",
-            "Location",
-            "Fare",
-            "Searching",
-            "Driver found",
-            "Live trip",
-            "Payment",
-            "Rating",
-          ].map((item, index) => (
-            <div
-              className={index === 2 ? "flow-step current" : "flow-step"}
-              key={item}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              {item}
-              {index < 9 && <b>→</b>}
-            </div>
-          ))}
+        <button
+          className="ghost-button"
+          onClick={() => {
+            setStage("home");
+            setPassengerAction(text.rideRequestCancelled);
+          }}
+        >
+          {text.cancel}
+        </button>
+      </section>
+    );
+  }
+
+  if (stage === "found") {
+    return (
+      <section className="journey-panel panel driver-found-panel">
+        <div className="driver-profile">
+          <div className="driver-photo">HM</div>
+          <div>
+            <p className="eyebrow">{text.driverFound.toUpperCase()}</p>
+            <h2>
+              Hassan Mwinyi <span>{isSwahili ? "Rating 4.9" : "4.9 rating"}</span>
+            </h2>
+            <p className="muted">{isSwahili ? "Toyota Vitz, nyeupe. Namba Z 428 HMM." : "Toyota Vitz, white. Plate Z 428 HMM."}</p>
+          </div>
+        </div>
+        <div className="ride-facts">
+          <div>
+            <small>{text.carPlate}</small>
+            <b>Z 428 HMM</b>
+          </div>
+          <div>
+            <small>{text.eta}</small>
+            <b>4 min</b>
+          </div>
+          <div>
+            <small>{text.payment}</small>
+            <b>{isSwahili ? "Cash / mobile money" : "Cash / mobile money"}</b>
+          </div>
+        </div>
+        <div className="journey-actions">
+          <button onClick={callDriver}>{text.call}</button>
+          <button onClick={chatDriver}>{text.chat}</button>
+          <button className="primary-button small" onClick={() => setStage("trip")}>
+            {text.startTrip}
+          </button>
         </div>
       </section>
-    </div>
-  );
-}
+    );
+  }
 
-function Driver() {
-  const [online, setOnline] = useState(true);
-  const [requestStatus, setRequestStatus] = useState("New request");
-  return (
-    <div className="page">
-      <div className="page-heading">
+  if (stage === "trip") {
+    return (
+      <section className="journey-panel panel live-trip-panel">
         <div>
-          <p className="eyebrow">DRIVER APP / TODAY</p>
-          <h1>Good morning, Hassan.</h1>
-          <p className="muted">You are making island journeys possible.</p>
+          <p className="eyebrow">{isSwahili ? "SAFARI ILIYOANZISHA" : "LIVE TRIP"}</p>
+          <h2>{text.onWayTo}</h2>
+          <p className="muted">{text.eta18}</p>
         </div>
-        <button className="online-toggle" onClick={() => setOnline((value) => !value)}>
-          <span /> {online ? "Online" : "Offline"} <b>⌄</b>
+        <div className="trip-driver-row">
+          <div className="driver-photo small">HM</div>
+          <div>
+            <b>Hassan Mwinyi</b>
+            <small>Z 428 HMM, Toyota Vitz</small>
+          </div>
+          <button onClick={chatDriver}>{text.chat}</button>
+        </div>
+        <button className="primary-button" onClick={() => setStage("rating")}>
+          {text.endTripAndPay} <span>{text.done}</span>
         </button>
-      </div>
-      <div className="driver-stats">
-        <div className="stat-card">
-          <span className="stat-icon orange">◒</span>
-          <small>Today's earnings</small>
-          <strong>TSh 84,500</strong>
-          <em>↑ 12.4% vs yesterday</em>
-        </div>
-        <div className="stat-card">
-          <span className="stat-icon teal">◷</span>
-          <small>Trips completed</small>
-          <strong>08</strong>
-          <em>↑ 2 from yesterday</em>
-        </div>
-        <div className="stat-card">
-          <span className="stat-icon blue">★</span>
-          <small>Your rating</small>
-          <strong>4.92</strong>
-          <em>Top 10% of drivers</em>
-        </div>
-      </div>
-      <div className="driver-grid">
-        <section className="panel request-panel">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">NEW REQUEST</p>
-              <h2>Airport → Nungwi</h2>
-            </div>
-            <span className="timer">0:18</span>
-          </div>
-          <div className="request-route">
-            <div>
-              <span className="pin green">●</span>
-              <b>Abeid Amani Karume Airport</b>
-              <small>Terminal 1 · Pickup in 3 min</small>
-            </div>
-            <div className="route-line" />
-            <div>
-              <span className="pin red">●</span>
-              <b>Nungwi Beach Resort</b>
-              <small>23.6 km · Approx. 46 min</small>
-            </div>
-          </div>
-          <div className="request-footer">
-            <div>
-              <small>Estimated earnings</small>
-              <strong>TSh 32,000</strong>
-            </div>
-            <button className="ghost-button" onClick={() => setRequestStatus("Request declined")}>Decline</button>
-            <button className="primary-button small" onClick={() => setRequestStatus("Ride accepted")}>Accept ride →</button>
-            <small className="request-feedback">{requestStatus}</small>
-          </div>
-        </section>
-        <section className="panel driver-map">
-          <div className="map-heading">
-            <h2>Driver location</h2>
-            <span className="live-dot">Live now</span>
-          </div>
-          <div className="mini-map">
-            <div className="island-shape" />
-            <div className="mini-road one" />
-            <div className="mini-road two" />
-            <div className="map-pin car mini-car">◆</div>
-            <div className="map-pin mini-destination">●</div>
-            <span className="mini-label">Stone Town</span>
-            <span className="mini-label north">Nungwi</span>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
+      </section>
+    );
+  }
 
-function Admin() {
-  const [action, setAction] = useState("Ready");
   return (
-    <div className="page admin-page">
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">WEDNESDAY, 16 SEPTEMBER 2026</p>
-          <h1>Good morning, Zahra.</h1>
-          <p className="muted">Here is what is happening across Zanzi today.</p>
-        </div>
-        <button className="date-button" onClick={() => setAction("Date filter opened")}>
-          ▣ Today, 16 Sep <span>⌄</span>
-        </button>
+    <section className="journey-panel panel rating-panel">
+      <div>
+        <p className="eyebrow">{text.tripComplete}</p>
+        <h2>{text.rateRide}</h2>
+        <p className="muted">{isSwahili ? "Ukadiriaji wako husaidia kuweka Zanzi Ride salama na ya kuaminika." : "Your rating helps keep Zanzi Ride safe and reliable."}</p>
       </div>
-      <div className="admin-stats">
-        <div>
-          <small>Gross revenue</small>
-          <strong>TSh 4.82M</strong>
-          <em>↑ 18.6%</em>
-          <span>Compared to last week</span>
-        </div>
-        <div>
-          <small>Active trips</small>
-          <strong>38</strong>
-          <em>↑ 8.2%</em>
-          <span>12 awaiting drivers</span>
-        </div>
-        <div>
-          <small>Drivers online</small>
-          <strong>
-            126 <i>/ 284</i>
-          </strong>
-          <em className="neutral">44.4%</em>
-          <span>Across Zanzibar</span>
-        </div>
-        <div>
-          <small>Platform commission</small>
-          <strong>TSh 724K</strong>
-          <em>↑ 21.3%</em>
-          <span>15% average rate</span>
-        </div>
+      <div className="payment-summary">
+        <span>{text.paymentLabel}</span>
+        <strong>TSh 9,500</strong>
       </div>
-      <div className="admin-grid">
-        <section className="panel live-map-panel">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">OPERATIONS CENTER</p>
-              <h2>Live driver map</h2>
-            </div>
-            <button className="outline-button" onClick={() => setAction("Full live map opened")}>View full map ↗</button>
-          </div>
-          <div className="admin-map">
-            <div className="map-contours c1" />
-            <div className="map-contours c2" />
-            <div className="admin-road r1" />
-            <div className="admin-road r2" />
-            <div className="admin-road r3" />
-            <div className="admin-pin pin1">
-              <span>◆</span>
-              <b>Driver 001</b>
-              <small>Stone Town</small>
-            </div>
-            <div className="admin-pin pin2">
-              <span>◆</span>
-              <b>Driver 002</b>
-              <small>Airport</small>
-            </div>
-            <div className="admin-pin pin3">
-              <span>◆</span>
-              <b>Driver 003</b>
-              <small>Nungwi</small>
-            </div>
-            <div className="admin-map-footer">
-              <span>●</span>
-              <b>126 drivers online</b>
-              <small>Updated just now</small>
-            </div>
-          </div>
-        </section>
-        <section className="panel activity-panel">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">RIGHT NOW</p>
-              <h2>Live activity</h2>
-            </div>
-            <button className="more-button" onClick={() => setAction("Activity options opened")}>···</button>
-          </div>
-          <div className="activity-list">
-            <div>
-              <span className="activity-icon ride">↗</span>
-              <p>
-                <b>Trip started</b>
-                <small>Driver 014 · Kisauni → Mbweni</small>
-              </p>
-              <time>2m</time>
-            </div>
-            <div>
-              <span className="activity-icon money">TSh</span>
-              <p>
-                <b>Payment received</b>
-                <small>Trip #ZR-2048 · Cash</small>
-              </p>
-              <time>4m</time>
-            </div>
-            <div>
-              <span className="activity-icon alert">!</span>
-              <p>
-                <b>Driver verification</b>
-                <small>3 documents need review</small>
-              </p>
-              <time>8m</time>
-            </div>
-            <div>
-              <span className="activity-icon user">+</span>
-              <p>
-                <b>New passenger signup</b>
-                <small>Amir Juma · Zanzibar City</small>
-              </p>
-              <time>12m</time>
-            </div>
-          </div>
-          <button className="full-link" onClick={() => setAction("All activity opened")}>
-            View all activity <span>→</span>
+      <div className="rating-stars">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            aria-label={`${star} star rating`}
+            key={star}
+            onClick={() => setPassengerAction(text.ratingSelected(star))}
+          >
+            ★
           </button>
-        </section>
+        ))}
       </div>
-      <div className="bottom-panels">
-        <section className="panel table-panel">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">FLEET</p>
-              <h2>Driver status</h2>
-            </div>
-            <button className="outline-button" onClick={() => setAction("Driver management opened")}>Manage drivers ↗</button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>DRIVER</th>
-                <th>LOCATION</th>
-                <th>STATUS</th>
-                <th>TRIPS TODAY</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {drivers.map((driver) => (
-                <tr key={driver.name}>
-                  <td>
-                    <span
-                      className="table-avatar"
-                      style={{ background: driver.color }}
-                    >
-                      {driver.initials}
-                    </span>
-                    <b>{driver.name}</b>
-                  </td>
-                  <td>{driver.place}</td>
-                  <td>
-                    <span
-                      className={
-                        driver.status === "Available"
-                          ? "table-status available"
-                          : "table-status trip"
-                      }
-                    >
-                      <i />
-                      {driver.status}
-                    </span>
-                  </td>
-                  <td>
-                    {driver.name === "Driver 001"
-                      ? "06"
-                      : driver.name === "Driver 002"
-                        ? "04"
-                        : "08"}
-                  </td>
-                  <td>···</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-        <section className="panel quick-panel">
-          <p className="eyebrow">QUICK ACTIONS</p>
-          <h2>Keep things moving.</h2>
-          <button onClick={() => setAction("Driver verification opened")}>
-            ♙{" "}
-            <span>
-              Review drivers <small>3 pending applications</small>
-            </span>
-            <b>→</b>
-          </button>
-          <button onClick={() => setAction("Pricing editor opened")}>
-            ◔{" "}
-            <span>
-              Update pricing <small>Peak pricing is off</small>
-            </span>
-            <b>→</b>
-          </button>
-          <button onClick={() => setAction("Reports opened")}>
-            ▥{" "}
-            <span>
-              View reports <small>August performance</small>
-            </span>
-            <b>→</b>
-          </button>
-        </section>
-      </div>
-      <div className="admin-action-status" role="status">{action}</div>
-    </div>
+      <button className="primary-button" onClick={() => setStage("home")}>
+        {text.done} <span>{text.close}</span>
+      </button>
+    </section>
   );
 }
 
 export default App;
+

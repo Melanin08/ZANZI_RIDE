@@ -1,14 +1,3 @@
-export type ApiDriver = {
-  id: string;
-  name: string;
-  place: string;
-  initials: string;
-  color: string;
-  status: string;
-  online: boolean;
-  tripsToday: number;
-};
-
 export type Ride = {
   id: string;
   pickup: string;
@@ -18,21 +7,10 @@ export type Ride = {
   status: string;
   estimatedFare: string;
   createdAt: string;
-};
-
-export type DashboardData = {
-  grossRevenue: string;
-  activeTrips: number;
-  driversOnline: number;
-  totalDrivers: number;
-  commission: string;
-  drivers: ApiDriver[];
-  activity: Array<{
-    type: string;
-    title: string;
-    detail: string;
-    time: string;
-  }>;
+  driverId?: string | null;
+  driverName?: string | null;
+  vehiclePlate?: string | null;
+  etaMinutes?: number | null;
 };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -44,10 +22,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getDashboard() {
-  return request<{ data: DashboardData }>("/api/dashboard");
-}
-
 export function checkApiHealth() {
   return request<{ ok: boolean; service: string }>("/api/health");
 }
@@ -56,7 +30,7 @@ export function subscribeToEvents(
   onEvent: (event: { type: string; data: unknown }) => void,
 ) {
   const source = new EventSource("/api/events");
-  const eventTypes = ["connected", "ride.created", "ride.updated"];
+  const eventTypes = ["connected", "ride.created", "ride.updated", "ride.accepted"];
   eventTypes.forEach((type) => {
     source.addEventListener(type, (message) => {
       const event = message as MessageEvent<string>;
@@ -72,7 +46,7 @@ export function createRide(payload: {
   vehicle: string;
   paymentMethod: string;
 }) {
-    return request<{ data: Ride }>("/api/rides", {
+  return request<{ data: Ride }>("/api/rides", {
     method: "POST",
     body: JSON.stringify(payload),
   });
