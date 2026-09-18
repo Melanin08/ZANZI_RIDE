@@ -319,20 +319,26 @@ function AdminBoard({ language }: { language: Language }) {
   const [stats] = useState([
     { label: language === "sw" ? "Safari zinazoendelea" : "Trips in progress", value: "18" },
     { label: language === "sw" ? "Drivers online" : "Drivers online", value: "42" },
-    { label: language === "sw" ? "Wateja" : "Customers", value: "1,240" },
+    { label: language === "sw" ? "Customers" : "Customers", value: "1,240" },
     { label: language === "sw" ? "Mapato" : "Revenue", value: "TSh 3.4M" },
-    { label: language === "sw" ? "Commission" : "Commission", value: "TSh 510K" },
-    { label: language === "sw" ? "Malalamiko" : "Complaints", value: "06" },
-    { label: language === "sw" ? "Uthibitisho wa dereva" : "Driver verification", value: "96%" },
-    { label: language === "sw" ? "Bei" : "Pricing", value: "Updated" },
-    { label: language === "sw" ? "Promos" : "Promotions", value: "04" },
-    { label: language === "sw" ? "Ripoti" : "Reports", value: "Live" },
+    { label: language === "sw" ? "Commission yako" : "Your commission", value: "TSh 510K" },
+    { label: language === "sw" ? "Complaints" : "Complaints", value: "06" },
+    { label: language === "sw" ? "Driver verification" : "Driver verification", value: "96%" },
+    { label: language === "sw" ? "Pricing" : "Pricing", value: "Updated" },
+    { label: language === "sw" ? "Promotions" : "Promotions", value: "04" },
+    { label: language === "sw" ? "Reports" : "Reports", value: "Live" },
   ]);
 
   const drivers = [
     { name: "Driver 001", area: "Stone Town", status: "On trip" },
     { name: "Driver 002", area: "Airport", status: "Available" },
     { name: "Driver 003", area: "Nungwi", status: "On trip" },
+  ];
+
+  const liveDrivers = [
+    "Driver 001 — Stone Town",
+    "Driver 002 — Airport",
+    "Driver 003 — Nungwi",
   ];
 
   const menuItems = [
@@ -355,29 +361,44 @@ function AdminBoard({ language }: { language: Language }) {
             : "settings";
 
   return (
-    <div className="page passenger-page" style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)", gap: 18 }}>
-      <aside className="panel" style={{ padding: 18, alignSelf: "start" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-          <div className="brand-mark" style={{ width: 30, height: 30, borderRadius: 10, display: "grid", placeItems: "center" }}>Z</div>
+    <div className="page passenger-page" style={{ width: "100%", minHeight: "100vh", margin: 0, padding: 0, overflow: "hidden" }}>
+      <aside
+        style={{
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 260,
+          background: "linear-gradient(180deg, #183f36 0%, #1d5d4e 100%)",
+          color: "#fff",
+          padding: "22px 16px",
+          overflow: "hidden",
+          borderRadius: 0,
+          boxShadow: "inset -1px 0 0 rgba(255,255,255,0.08)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28, padding: "0 8px" }}>
+          <div className="brand-mark" style={{ width: 30, height: 30, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.14)" }}>Z</div>
           <div>
-            <strong>Zanzi Ride</strong>
-            <small style={{ display: "block", color: "#6d8177" }}>{language === "sw" ? "Admin" : "Admin"}</small>
+            <strong style={{ fontSize: 18 }}>Zanzi Ride</strong>
+            <small style={{ display: "block", color: "rgba(255,255,255,0.75)" }}>{language === "sw" ? "Admin" : "Admin"}</small>
           </div>
         </div>
 
-        <nav style={{ display: "grid", gap: 8 }}>
+        <nav style={{ display: "grid", gap: 10 }}>
           {menuItems.map((item) => (
             <button
               key={item.label}
               onClick={() => setSelectedTab(item.label)}
               style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: selectedTab === item.label ? "1px solid #1f755d" : "1px solid #e4ece6",
-                background: selectedTab === item.label ? "#edf7ee" : "#fff",
-                color: selectedTab === item.label ? "#153b34" : "#3d554e",
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: selectedTab === item.label ? "1px solid rgba(255,255,255,0.35)" : "1px solid transparent",
+                background: selectedTab === item.label ? "rgba(255,255,255,0.12)" : "transparent",
+                color: "#fff",
                 textAlign: "left",
                 fontWeight: 700,
+                cursor: "pointer",
               }}
             >
               {item.label}
@@ -386,7 +407,7 @@ function AdminBoard({ language }: { language: Language }) {
         </nav>
       </aside>
 
-      <section style={{ minWidth: 0 }}>
+      <section style={{ marginLeft: 260, minWidth: 0, height: "100vh", background: "#f5f8f4", padding: "18px 18px 22px", borderRadius: 0, overflow: "auto" }}>
         <div className="passenger-hero">
           <div>
             <p className="eyebrow">{language === "sw" ? "ADMIN DASHBOARD" : "ADMIN DASHBOARD"}</p>
@@ -428,7 +449,7 @@ function AdminBoard({ language }: { language: Language }) {
                     <span>Z</span>
                     <div>
                       <b>{language === "sw" ? "Wadereva wanaotumika" : "Active drivers"}</b>
-                      <small>{language === "sw" ? "Driver 001 — Stone Town · Driver 002 — Airport · Driver 003 — Nungwi" : "Driver 001 — Stone Town · Driver 002 — Airport · Driver 003 — Nungwi"}</small>
+                      <small>{liveDrivers.join(" • ")}</small>
                     </div>
                   </div>
                 </div>
