@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: zanzi-ride
+    runtime: python
+    buildCommand: npm ci && npm run build && pip install -r server/requirements.txt
+    startCommand: gunicorn --chdir server app:app
+    healthCheckPath: /api/health

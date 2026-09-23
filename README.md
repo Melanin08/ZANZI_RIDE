@@ -52,6 +52,17 @@ npm run build
 npm run lint
 ```
 
+## Deploy a public demo
+
+This repository includes `render.yaml` for a single Render web service. The service builds the React client, serves it from Flask, and keeps the `/api` routes on the same public URL.
+
+1. Push the repository to GitHub.
+2. Open [render.com](https://render.com), sign in, and choose **New > Blueprint**.
+3. Select the `ZANZI_RIDE` repository and apply the detected `render.yaml`.
+4. Wait for the deploy to finish, then open the `onrender.com` URL. Use `/`, `/passenger`, `/driver`, or `/admin`.
+
+Render uses the included build command and starts Flask with Gunicorn. The current SQLite database is suitable for this demonstration only; it is not durable across service rebuilds or restarts.
+
 ## API routes
 
 - `GET /api/health`

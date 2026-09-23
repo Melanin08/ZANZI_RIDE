@@ -5,10 +5,11 @@ import sqlite3
 import time
 from queue import Queue
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-app = Flask(__name__)
+CLIENT_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "client", "dist"))
+app = Flask(__name__, static_folder=CLIENT_DIST, static_url_path="/static")
 CORS(app)
 
 event_subscribers = set()
@@ -49,6 +50,9 @@ def init_db():
         }.items():
             if name not in columns:
                 connection.execute(f"ALTER TABLE rides ADD COLUMN {name} {definition}")
+
+
+init_db()
 
 
 def serialize_ride(row):
@@ -180,7 +184,16 @@ def update_ride_status(ride_id):
     return jsonify({"data": ride})
 
 
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def client(path):
+    requested_file = os.path.join(app.static_folder, path)
+    if path and os.path.isfile(requested_file):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, "index.html")
+
+
 if __name__ == "__main__":
     init_db()
     port = int(os.getenv("PORT", "4000"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG") == "1")

@@ -40,9 +40,10 @@ function estimateFare(vehicle: string, distanceKm: number) {
   return `${formatTsh(low)} - ${formatTsh(high)}`;
 }
 
-type AppMode = "passenger" | "driver" | "admin";
+type AppMode = "home" | "passenger" | "driver" | "admin";
 
 const modeRoutes: Record<AppMode, string> = {
+  home: "/",
   passenger: "/passenger",
   driver: "/driver",
   admin: "/admin",
@@ -52,7 +53,8 @@ function modeFromPath(pathname: string): AppMode {
   const section = pathname.split("/").filter(Boolean)[0];
   if (section === "driver") return "driver";
   if (section === "admin") return "admin";
-  return "passenger";
+  if (section === "passenger") return "passenger";
+  return "home";
 }
 
 function App() {
@@ -64,6 +66,9 @@ function App() {
     "connecting",
   );
   const [lastEvent, setLastEvent] = useState("Waiting for server");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("driver@zanzi.app");
+  const [loginPassword, setLoginPassword] = useState("password123");
   const [currentMode, setCurrentMode] = useState<AppMode>(() =>
     modeFromPath(window.location.pathname),
   );
@@ -103,6 +108,144 @@ function App() {
     };
   }, []);
 
+  if (currentMode === "home") {
+    const choices = [
+      { key: "passenger", label: "Passenger", description: "Book a ride, choose a vehicle, and track the trip." },
+      { key: "driver", label: "Driver", description: "Accept trips, go online, and see your earnings." },
+      { key: "admin", label: "Admin", description: "Manage drivers, routes, revenue, and fleet performance." },
+    ] as const;
+
+    if (!isLoggedIn) {
+      return (
+        <div className="app-shell home-only" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "linear-gradient(135deg, #0f1f1b 0%, #163f36 36%, #1e725f 72%, #f0bf69 100%)" }}>
+          <main style={{ width: "min(1060px, calc(100% - 28px))", display: "grid", gridTemplateColumns: "1.1fr 0.9fr", borderRadius: 26, overflow: "hidden", background: "#f7faf7", boxShadow: "0 28px 80px rgba(13, 29, 24, 0.22)" }}>
+            <section style={{ padding: 34, background: "linear-gradient(135deg, #163a34 0%, #1d715d 100%)", color: "#fff", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <div style={{ display: "inline-grid", placeItems: "center", width: 52, height: 52, borderRadius: 16, background: "#dff2cb", color: "#163a34", fontWeight: 900, fontSize: 28, marginBottom: 22 }}>Z</div>
+              <p style={{ margin: 0, fontSize: 11, letterSpacing: 2, fontWeight: 800, color: "#e5f7cf", textTransform: "uppercase" }}>Zanzi Ride</p>
+              <h1 style={{ margin: "18px 0 14px", fontSize: 44, lineHeight: 1.05, letterSpacing: "-1px" }}>Move faster across Zanzibar.</h1>
+              <p style={{ margin: 0, maxWidth: 420, lineHeight: 1.7, color: "rgba(255,255,255,0.82)", fontSize: 15 }}>
+                A mobility platform for passengers, drivers, and owners. Book rides, match drivers, track trips, and manage operations in one place.
+              </p>
+
+              <div style={{ marginTop: 26, display: "grid", gap: 12, maxWidth: 420 }}>
+                {[
+                  "Live trip matching",
+                  "Transparent pricing",
+                  "Driver and fleet dashboard",
+                ].map((item) => (
+                  <div key={item} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                    <span style={{ display: "inline-grid", placeItems: "center", width: 20, height: 20, borderRadius: "50%", background: "#f5c86f", color: "#163a34", fontWeight: 900, fontSize: 11 }}>✓</span>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section style={{ padding: 34, display: "flex", flexDirection: "column", justifyContent: "center", background: "#f8fbf8" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 11, letterSpacing: 1.6, textTransform: "uppercase", color: "#5f8d78", fontWeight: 800 }}>Welcome back</p>
+                  <h2 style={{ margin: "6px 0 0", color: "#183d35", fontSize: 30, letterSpacing: "-0.8px" }}>Sign in</h2>
+                </div>
+                <button
+                  style={{ border: "1px solid #dfeae3", borderRadius: 999, background: "#fff", color: "#183d35", padding: "8px 12px", fontWeight: 700, cursor: "pointer" }}
+                  onClick={() => setLoginEmail("admin@zanzi.app")}
+                >
+                  Demo account
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gap: 14 }}>
+                <label style={{ display: "grid", gap: 7 }}>
+                  <span style={{ fontSize: 11, color: "#6f8378", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1.2 }}>Email</span>
+                  <input
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                    placeholder="name@zanzi.app"
+                    style={{ width: "100%", border: "1px solid #dfeae3", borderRadius: 12, background: "#fff", padding: "14px 14px", fontSize: 14, color: "#183d35", outline: "none" }}
+                  />
+                </label>
+
+                <label style={{ display: "grid", gap: 7 }}>
+                  <span style={{ fontSize: 11, color: "#6f8378", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1.2 }}>Password</span>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    placeholder="••••••••"
+                    style={{ width: "100%", border: "1px solid #dfeae3", borderRadius: 12, background: "#fff", padding: "14px 14px", fontSize: 14, color: "#183d35", outline: "none" }}
+                  />
+                </label>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 4 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#5e776d", fontSize: 12, fontWeight: 600 }}>
+                    <input type="checkbox" defaultChecked /> Remember me
+                  </label>
+                  <button style={{ border: "none", background: "transparent", color: "#1f755d", fontWeight: 800, cursor: "pointer", fontSize: 12 }}>Forgot password?</button>
+                </div>
+
+                <button
+                  onClick={() => setIsLoggedIn(true)}
+                  style={{ marginTop: 8, border: "none", background: "linear-gradient(135deg, #1f755d 0%, #163f36 100%)", color: "#fff", padding: "15px 18px", borderRadius: 12, fontSize: 15, fontWeight: 800, cursor: "pointer", boxShadow: "0 16px 28px rgba(31,117,93,0.22)" }}
+                >
+                  Continue to dashboard
+                </button>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12, color: "#7a8d84", fontSize: 11, textTransform: "uppercase", fontWeight: 800, letterSpacing: 1.2 }}>
+                  <span style={{ borderTop: "1px solid #dfeae3", display: "block" }} />
+                  <span>or</span>
+                  <span style={{ borderTop: "1px solid #dfeae3", display: "block" }} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button style={{ border: "1px solid #dfeae3", borderRadius: 12, background: "#fff", color: "#183d35", padding: "12px 14px", fontWeight: 700, cursor: "pointer" }}>Google</button>
+                  <button style={{ border: "1px solid #dfeae3", borderRadius: 12, background: "#fff", color: "#183d35", padding: "12px 14px", fontWeight: 700, cursor: "pointer" }}>Apple</button>
+                </div>
+              </div>
+            </section>
+          </main>
+        </div>
+      );
+    }
+
+    return (
+      <div className="app-shell home-only" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "linear-gradient(135deg, #173c34 0%, #1f755d 55%, #f4c16b 100%)" }}>
+        <main style={{ width: "min(1100px, calc(100% - 32px))", background: "rgba(255,255,255,0.96)", borderRadius: 24, boxShadow: "0 20px 60px rgba(22,46,39,0.18)", padding: 32 }}>
+          <div style={{ textAlign: "center", marginBottom: 30 }}>
+            <div style={{ display: "inline-grid", placeItems: "center", width: 56, height: 56, borderRadius: 18, background: "#ddf1cb", color: "#1f755d", fontWeight: 900, fontSize: 28, marginBottom: 14 }}>Z</div>
+            <p style={{ margin: 0, color: "#5f8d78", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", fontWeight: 800 }}>Zanzi Ride</p>
+            <h1 style={{ margin: "12px 0 10px", color: "#183d35", fontSize: 42, letterSpacing: "-1px" }}>Choose your app</h1>
+            <p style={{ margin: 0, color: "#62786f", fontSize: 15, lineHeight: 1.7, maxWidth: 640, marginInline: "auto" }}>
+              Signed in as <strong>{loginEmail}</strong>. Select the role you want to open.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 18 }}>
+            {choices.map((choice) => (
+              <button
+                key={choice.key}
+                onClick={() => setCurrentMode(choice.key)}
+                style={{
+                  textAlign: "left",
+                  padding: 22,
+                  border: "1px solid #e1ebdf",
+                  borderRadius: 18,
+                  background: "linear-gradient(180deg, #ffffff 0%, #f5faf4 100%)",
+                  boxShadow: "0 10px 20px rgba(32, 70, 56, 0.06)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ display: "inline-grid", placeItems: "center", width: 42, height: 42, borderRadius: 12, background: "#e9f4eb", color: "#1f755d", fontWeight: 900, marginBottom: 16 }}>{choice.label[0]}</div>
+                <div style={{ color: "#183d35", fontSize: 26, fontWeight: 800, marginBottom: 8 }}>{choice.label}</div>
+                <div style={{ color: "#697d74", fontSize: 13, lineHeight: 1.6 }}>{choice.description}</div>
+              </button>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-shell ${currentMode}-only`}>
       <main className="main-content">
@@ -128,6 +271,16 @@ function App() {
           </div>
 
           <div className="top-actions">
+            <button
+              className="ghost-button"
+              onClick={() => {
+                setCurrentMode("home");
+                setIsLoggedIn(true);
+              }}
+              style={{ minHeight: 36, padding: "0 12px", border: "1px solid #dfeae3", borderRadius: 8, background: "#fff", color: "#234336", fontWeight: 700 }}
+            >
+              Choose app
+            </button>
             <span className={`api-status ${apiStatus}`} title={lastEvent}>
               <i /> API {apiStatus === "live" ? "LIVE" : apiStatus.toUpperCase()}
             </span>
@@ -601,10 +754,10 @@ function Passenger({
   const isSwahili = language === "sw";
   const text = {
     appTitle: isSwahili ? "Zanzi Ride" : "Zanzi Ride",
-    heroTitle: isSwahili ? "Uko wapi unakwenda" : "Where are you going",
+    heroTitle: isSwahili ? "Pata safari ndani ya sekunde" : "Book a ride in seconds",
     heroSubtitle: isSwahili
       ? "Ingiza sehemu ya kukokota na ya kufika, chagua aina ya gari, angalia makadirio ya bei, na uombe safari."
-      : "Enter pickup and destination, choose the car type, check the estimated price, then request your ride.",
+      : "Set your pickup, choose a destination, confirm your ride, and get matched with a nearby driver in seconds.",
     rideRequest: isSwahili ? "Omba safari" : "Request Ride",
     tripDetails: isSwahili ? "Maelezo ya safari" : "Trip details",
     pickupLocation: isSwahili ? "Mahali pa kukokota" : "Pickup location",
@@ -838,6 +991,52 @@ function Passenger({
               : text.priceAppears}
           </span>
         </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          margin: "0 0 18px",
+        }}
+      >
+        {[
+          { title: isSwahili ? "1. Omesha safari" : "1. Request ride", body: isSwahili ? "Taarifa za safari na gharama zinajumuishwa." : "Trip details and price appear instantly." },
+          { title: isSwahili ? "2. Dereva anapatikana" : "2. Driver found", body: isSwahili ? "Tunaangalia dereva karibu nawe hivi punde." : "A nearby driver is matched to your route." },
+          { title: isSwahili ? "3. Safari inakwenda" : "3. Ride active", body: isSwahili ? "Uwepo wa dereva na ETA zinajulikana kwa wakati halisi." : "Live ETA and driver tracking are visible." },
+          { title: isSwahili ? "4. Pima safari" : "4. Rate trip", body: isSwahili ? "Kadiria safari baada ya kukamilika." : "Rate the trip and finish the journey." },
+        ].map((step, index) => (
+          <div
+            key={step.title}
+            className="panel"
+            style={{
+              padding: 16,
+              borderColor: stage === "home" && index === 0 ? "#9bc5af" : "#e3ece4",
+              background: index === 0 ? "#f2faf1" : "#fff",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span
+                style={{
+                  display: "inline-grid",
+                  placeItems: "center",
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: "#1f755d",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: 12,
+                }}
+              >
+                {index + 1}
+              </span>
+              <strong style={{ fontSize: 12, color: "#234336" }}>{step.title}</strong>
+            </div>
+            <div style={{ color: "#6f8177", fontSize: 11, lineHeight: 1.5 }}>{step.body}</div>
+          </div>
+        ))}
       </div>
 
       <div className="passenger-grid">
