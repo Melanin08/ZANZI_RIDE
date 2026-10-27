@@ -1,0 +1,39 @@
+﻿.rider-shell { min-height:100dvh; background:#fff; color:#202521; font-family:Arial,'Segoe UI',sans-serif; }
+.rider-content { max-width:660px; margin:0 auto; padding:36px 22px calc(115px + env(safe-area-inset-bottom)); }
+.rider-content h1 { margin:0 0 28px; font-size:32px; line-height:1.2; letter-spacing:-1.1px; font-weight:750; }
+.service-cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+.service-cards button { display:flex; flex-direction:column; align-items:center; padding:8px 10px 16px; border-radius:13px; background:#f0f2f1; }
+.service-vehicle { width:145px; max-width:100%; height:83px; }
+.service-cards strong { margin:3px 0 5px; font-size:23px; font-weight:500; }
+.service-cards span { color:#666d68; font-size:17px; }
+.where-to { width:100%; display:flex; align-items:center; gap:18px; background:#f0f2f1; border-radius:13px; padding:24px; text-align:left; margin-bottom:24px; font-size:25px; }
+.where-to svg { width:27px; height:27px; flex-shrink:0; }
+.suggested-places { display:grid; gap:24px; }
+.suggested-places button { display:flex; align-items:center; gap:16px; padding:0; text-align:left; }
+.place-icon { display:grid; place-items:center; width:64px; height:64px; flex-shrink:0; border-radius:12px; background:#f0f2f1; color:#67716b; }
+.place-icon svg { width:30px; height:30px; }
+.suggested-places strong { display:block; font-size:21px; font-weight:500; line-height:1.3; }
+.suggested-places small { display:block; margin-top:6px; font-size:18px; color:#737a75; }
+.rider-bottom-nav { position:fixed; z-index:20; bottom:0; left:0; right:0; display:grid; grid-template-columns:repeat(3,1fr); gap:0; padding:12px max(10px,calc((100vw - 660px)/2)) calc(14px + env(safe-area-inset-bottom)); background:#fff; border-top:1px solid #f0f0f0; }
+.rider-bottom-nav button { display:flex; flex-direction:column; align-items:center; gap:5px; padding:2px 0; color:#8b918d; font-size:16px; }
+.rider-bottom-nav button.active { color:#17211a; }
+.rider-bottom-nav svg { width:28px; height:28px; }
+.rider-shell button:focus-visible,.rider-auth button:focus-visible { outline:3px solid #34c889; outline-offset:4px; }
+.rider-section h1 { margin-bottom:12px; }
+.rider-muted { color:#737a75; }
+.empty-activity { text-align:center; padding:70px 15px; color:#737a75; }
+.empty-activity>svg { width:50px; height:50px; }
+.empty-activity h2 { color:#202521; }
+.rider-primary { width:100%; border:0; background:#2ab77c; color:#fff; border-radius:12px; padding:17px; font-weight:700; font-size:17px; }
+.rider-primary:disabled { opacity:.6; cursor:wait; }
+.activity-card { display:flex; align-items:center; gap:16px; padding:20px 0; border-bottom:1px solid #eee; }
+.activity-card p { margin:8px 0; }.activity-card small { color:#737a75; }
+.account-profile { margin:35px 0; }.account-profile svg { width:60px; height:60px; color:#2ab77c; }.account-profile p { color:#737a75; overflow-wrap:anywhere; }
+.account-session { padding:22px; background:#f0f6f2; border-radius:14px; }.account-session p { color:#66746b; line-height:1.6; margin-bottom:0; }
+.sign-out { margin-top:30px; color:#bd3939; padding:12px 0; }
+.back-home { margin-bottom:24px; font-weight:600; padding:10px 0; }
+.rider-content .passenger-page { padding:0; }.rider-content .passenger-hero { grid-template-columns:1fr; padding:22px; }.rider-content .passenger-hero h1 { font-size:26px; margin-bottom:10px; }.rider-content .passenger-page>div[style] { display:none!important; }.rider-content .passenger-grid { grid-template-columns:1fr; }.rider-content .booking-header { padding-left:0; padding-right:0; }.rider-content .passenger-page .map-card { min-height:420px; }.rider-content .journey-panel { flex-wrap:wrap; }.rider-content .location-action { white-space:normal; }
+.rider-auth { min-height:100dvh; display:grid; place-items:center; padding:30px 22px; background:#fff; }.auth-card { width:100%; max-width:420px; }.rider-wordmark { font-size:32px; font-weight:800; color:#202521; letter-spacing:-1.5px; }.rider-wordmark span { color:#2ab77c; }.auth-card h1 { margin:38px 0 14px; font-size:36px; line-height:1.1; letter-spacing:-1px; }.auth-card>p { color:#737a75; line-height:1.6; }.auth-card form { display:grid; gap:20px; margin-top:30px; }.auth-card label { display:grid; gap:8px; font-size:14px; font-weight:600; }.auth-card input { width:100%; border:1px solid #dce2de; background:#f7f9f8; border-radius:10px; padding:15px; font:inherit; font-size:16px; }.auth-card input:focus { outline:2px solid #2ab77c; }.auth-toggle { width:100%; margin-top:24px; padding:10px 0; font-size:14px; color:#237a58; }.rider-error { color:#b53333; line-height:1.5; }.session-loading { min-height:100dvh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; text-align:center; }.session-loading button { padding:14px 25px; background:#2ab77c; color:#fff; border-radius:10px; }
+@media(min-width:760px) { .rider-content { padding-top:55px; }.service-vehicle { height:105px; width:180px; } }
+@media(max-width:380px) { .rider-content { padding:28px 16px 110px; }.rider-content h1 { font-size:28px; }.suggested-places strong { font-size:18px; }.suggested-places small { font-size:16px; }.place-icon { width:54px; height:58px; }.service-cards span { font-size:15px; } }
+.calendar-banner { display:flex; width:100%; align-items:center; gap:16px; padding:0; margin-top:28px; text-align:left; }.calendar-icon { display:grid; place-items:center; background:#28895c; color:white; border-radius:12px; width:64px; height:64px; flex-shrink:0; }.calendar-icon svg { width:32px; height:32px; }.calendar-banner strong { display:block; color:#267c56; font-size:21px; }.calendar-banner small { display:block; color:#737a75; font-size:17px; margin-top:7px; }.calendar-banner>span:last-child { margin-left:auto; font-size:32px; color:#8b918d; }.reminder-form { margin-top:20px; padding:20px; background:#f2f6f3; border-radius:12px; }.reminder-form label { display:grid; gap:12px; }.reminder-form input { min-width:0; max-width:100%; padding:12px; border:1px solid #dce2de; border-radius:8px; font:inherit; }.reminder-form p { font-size:14px; color:#737a75; line-height:1.5; }

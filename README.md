@@ -41,7 +41,7 @@ During development, each web app has its own URL and navigation:
 - Driver app: `http://localhost:5173/driver`
 - Owner dashboard: `http://localhost:5173/owner`
 
-The root URL redirects to the passenger app, and `/admin` also opens the owner dashboard.
+The root URL and `/passenger` open the passenger app. `/admin` opens the admin dashboard. New passengers register once; returning passengers open directly into the home screen.
 
 ## Useful scripts
 
@@ -74,4 +74,14 @@ Render uses the included build command and starts Flask with Gunicorn. The curre
 - `PATCH /api/rides/:rideId/status`
 - `POST /api/rides/:rideId/accept`
 
-Production work still needs authentication, real driver/passenger accounts, a proper database, map provider integration, live GPS updates, and mobile-money provider integration.
+Production work still needs role-based driver/admin access, account recovery and email verification, a production database, map provider integration, live GPS updates, and mobile-money provider integration.
+
+## Passenger accounts and sessions
+
+Registration signs the passenger in immediately. Passwords are hashed on the server; the browser stores an HttpOnly, SameSite session cookie for up to ten years. Reopening or refreshing restores the account without another login. Signing out revokes that device?s session. Clearing browser data or using another device requires signing in again.
+
+Accounts, sessions, and passenger ride history are stored in SQLite. Set DATABASE_PATH to a database file on a persistent hosting volume so accounts and sessions survive deployment and server replacement. The supplied Render demo uses ephemeral storage by default; configure persistent storage before relying on saved accounts in production. Set COOKIE_SECURE=1 for HTTPS deployments behind a proxy.
+
+Home includes Rides and Boda, destination shortcuts, and a downloadable calendar reminder. The fixed Home, Activity, and Account tabs stay visible throughout booking. Activity shows only the signed-in passenger?s rides.
+
+Run account/session checks with: python -m unittest discover -s server -p test_accounts.py -v
